@@ -1,0 +1,203 @@
+Overall Implementation Plan
+
+  ---
+  Guiding Constraints
+
+  - Existing endpoints and all existing code: unchanged
+  - LLM model: same Qwen2.5-7B-Instruct at the same remote endpoint
+  - Output schema: identical to v1 (same JSON structure, same field names)
+  - New endpoints added alongside existing ones — no migration required
+
+  ---
+  Step 1 — Add OCR Fallback (scripts/ocr_processor.py)
+
+  The first problem to solve is scanned PDFs. Before any other improvement matters, the pipeline must be able to read image-based PDFs.
+
+  What it does:
+  - Receives a PDF path
+  - Runs pdfplumber on each page and measures text yield (characters extracted)
+  - If a page yields fewer than ~50 characters, it is classified as scanned
+  - Scanned pages are rendered to images via pdf2image, then passed through Tesseract OCR
+  - Returns a unified per-page text dict regardless of whether text came from pdfplumber or OCR
+
+  Result: The rest of the pipeline always receives text, whether the PDF is digital or scanned.
+
+  New dependency:
+  pdf2image>=1.17.0
+  pytesseract>=0.3.10
+  # Tesseract binary must be installed on the server
+
+  ---
+  Step 2 — Better Table Formatting (scripts/smart_pdf_processor.py)
+
+  The second problem is that pdfplumber tables arrive as ragged text. The LLM receives 829.64 1659.28 1534.00 2489.00 instead of a structured table.
+
+  What it does:
+  - Takes the raw table data already extracted by pdfplumber (same extract_tables() call)
+  - Converts each table to a Markdown table with aligned columns and headers
+  - For OCR pages (from Step 1), applies a heuristic column-splitter based on whitespace gaps
+
+  Example transformation:
+  BEFORE (current):  Gold PPO 829.64 1659.28 1534.00 2489.00
+  AFTER (new):
+  | Plan     | EE Only | EE+Spouse | EE+Child | Family  |
+  |----------|---------|-----------|----------|---------|
+  | Gold PPO | 829.64  | 1659.28   | 1534.00  | 2489.00 |
+
+  The same Qwen model extracts rates significantly more reliably from Markdown than from raw text.
+
+  ---
+  Step 3 — Page Relevance Scoring (scripts/smart_pdf_processor.py)
+
+  Today all pages — cover pages, legal disclaimers, signature pages — are sent to the LLM. Step 3 filters them before any LLM call is made.
+
+  What it does:
+  Each page receives a score based on:
+  - Presence of dollar amounts or bare decimal patterns
+  - Number of tables detected by pdfplumber
+  - Match count of rate keywords (rate, premium, employee, tier, plan, etc.)
+  - Content length
+
+  Pages below a configurable threshold are skipped. A 30-page proposal with 5 rate pages produces ~5–8 LLM calls instead of 30.
+
+  Fallback: If zero pages score above the threshold (e.g., unusual formatting), all pages are processed — no silent empty result.
+
+  ---
+  Step 4 — Document-Level Context Extraction (scripts/smart_pdf_processor.py)
+
+  Today each chunk is processed in isolation. The LLM on page 9 cannot see the carrier name on page 1.
+
+  What it does:
+  - Scans the first 3 pages of every PDF for carrier name, plan type, and effective date using a fast regex/keyword pass (no LLM call)
+  - Prepends this as a context block in every chunk's user prompt:
+
+  Document context: Carrier = Blue Cross Blue Shield of Illinois,
+  Effective Date = 01/01/2026, Plan Type = Medical
+
+  Pages 7-9:
+  [Markdown tables and text follow]
+
+  This eliminates the most common carrier-detection errors in multi-chunk PDFs.
+
+  ---
+  Step 5 — Continuity-Aware Chunker (scripts/smart_pdf_processor.py)
+
+  Today chunks are split at fixed page-count boundaries. A rate table spanning pages 7–9 may be split across two chunks, with the LLM seeing half a table in each.
+
+  What it does:
+  - Groups consecutive scored pages into chunks (up to 3–5 pages)
+  - Detects table continuity: if consecutive pages have the same column count and no new header row, they are kept in the same chunk
+  - Checks formatted Markdown size before finalizing each chunk — splits if it would exceed the character limit
+
+  Result: Fewer split-table artifacts. Fewer chunks. Fewer LLM calls.
+
+  ---
+  Step 6 — Result Cache (scripts/result_cache.py)
+
+  The same proposal PDF is often submitted multiple times (testing, retries, re-runs).
+
+  What it does:
+  - Computes SHA-256 hash of uploaded PDF bytes on arrival
+  - Checks an in-memory cache (dict keyed by hash)
+  - On cache hit: returns stored result immediately, zero LLM calls
+  - On cache miss: runs full extraction, stores result in cache
+  - Cache is cleared on server restart (sufficient for the current use case; can be made file-based if persistence is needed)
+
+  ---
+  Step 7 — New Extractor Orchestrator (scripts/smart_extractor.py)
+
+  This is the coordinator that wires Steps 1–6 together and calls RemoteLLM (unchanged).
+
+  Flow:
+
+  Upload PDF
+      │
+      ▼
+  [Step 6] Check cache → HIT → return immediately
+      │ MISS
+      ▼
+  [Step 1] OCR fallback — produce per-page text
+      │
+      ▼
+  [Step 4] Extract document-level context (carrier, date)
+      │
+      ▼
+  [Step 3] Score pages — filter to rate-relevant pages only
+      │
+      ▼
+  [Step 2] Format tables as Markdown
+      │
+      ▼
+  [Step 5] Group into continuity-aware chunks
+      │
+      ▼
+  [Parallel] Send chunks to RemoteLLM (max_concurrent=5)
+      │
+      ▼
+  Merge results using existing extract_json()
+      │                   normalize_plan()
+      │                   coerce_rate_value()
+      │                   deduplication logic
+      ▼
+  Store in cache → Return response
+
+  Reuses RemoteLLM, extract_json, normalize_plan, coerce_rate_value, SYSTEM_PROMPT — no changes to any existing file.
+
+  ---
+  Step 8 — New API Endpoints (added to api.py)
+
+  Two endpoints added at the bottom of the existing api.py:
+
+  ┌────────────────────────┬──────────────────────────────────────┐
+  │        Endpoint        │             Description              │
+  ├────────────────────────┼──────────────────────────────────────┤
+  │ POST /extract-v2       │ Single PDF, full smart pipeline      │
+  ├────────────────────────┼──────────────────────────────────────┤
+  │ POST /extract-batch-v2 │ Multiple PDFs, processed in parallel │
+  └────────────────────────┴──────────────────────────────────────┘
+
+  Same request format, same response schema as v1. Existing /extract, /extract-range, /extract-batch are not touched.
+
+  ---
+  Step 9 — Update requirements.txt
+
+  pdf2image>=1.17.0
+  pytesseract>=0.3.10
+
+  Plus server-side: tesseract-ocr OS package must be installed.
+
+  ---
+  Summary of New Files
+
+  ┌────────────────────────────────┬───────────────────────────────────────────────────────────────────┐
+  │              File              │                              Purpose                              │
+  ├────────────────────────────────┼───────────────────────────────────────────────────────────────────┤
+  │ scripts/ocr_processor.py       │ Detects scanned pages, applies Tesseract OCR                      │
+  ├────────────────────────────────┼───────────────────────────────────────────────────────────────────┤
+  │ scripts/smart_pdf_processor.py │ Markdown table formatter, page scorer, context extractor, chunker │
+  ├────────────────────────────────┼───────────────────────────────────────────────────────────────────┤
+  │ scripts/result_cache.py        │ SHA-256 keyed in-memory cache                                     │
+  ├────────────────────────────────┼───────────────────────────────────────────────────────────────────┤
+  │ scripts/smart_extractor.py     │ Orchestrates all steps, calls existing RemoteLLM                  │
+  └────────────────────────────────┴───────────────────────────────────────────────────────────────────┘
+
+  Modified files: api.py (two new endpoints appended), requirements.txt (two new packages)
+  Unchanged files: everything else
+
+  ---
+  Expected Gains vs Current
+
+  ┌────────────────────────────┬───────────────────────────────┬────────────────────────────────────────┐
+  │         Dimension          │            Current            │                  New                   │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ Scanned PDFs               │ Silent failure (empty result) │ Best-effort OCR extraction             │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ LLM calls (30-page PDF)    │ ~15–30                        │ ~5–8                                   │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ Table extraction quality   │ Raw text, misaligned columns  │ Markdown tables, aligned columns       │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ Carrier detection accuracy │ Per-chunk only                │ Document-level context in every chunk  │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ Repeated submissions       │ Full re-extraction every time │ Instant cache hit                      │
+  ├────────────────────────────┼───────────────────────────────┼────────────────────────────────────────┤
+  │ Split-table artifacts      │ Common at chunk boundaries    │ Minimized by continuity-aware chunking │

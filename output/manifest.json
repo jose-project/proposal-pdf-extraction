@@ -1,0 +1,52 @@
+[
+  {
+    "file": "source\\proposals\\CityKids Dental Renewal 2026 BCBSiL.pdf",
+    "output": "output\\CityKids Dental Renewal 2026 BCBSiL.json",
+    "plans": 87
+  },
+  {
+    "file": "source\\proposals\\CityKidsDental_BBFProposal_01.01.2026.pdf",
+    "output": "output\\CityKidsDental_BBFProposal_01.01.2026.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Jensenit, Yohnk Elite RFP 12.25 Principal Ameritas ONLY Proposal 10.8.25.pdf",
+    "output": "output\\Jensenit, Yohnk Elite RFP 12.25 Principal Ameritas ONLY Proposal 10.8.25.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\KS.P.74.16782435.116670347.NONACA.pdf",
+    "output": "output\\KS.P.74.16782435.116670347.NONACA.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Mega Polymers Inc. Proposal v2.pdf",
+    "output": "output\\Mega Polymers Inc. Proposal v2.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Mega Polymers Inc. Proposal v3.pdf",
+    "output": "output\\Mega Polymers Inc. Proposal v3.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Nationwide Greenhouse Digital quote.pdf",
+    "output": "output\\Nationwide Greenhouse Digital quote.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Proposal Raw Cut Creative Company BCBSIL Small PPO.pdf",
+    "output": "output\\Proposal Raw Cut Creative Company BCBSIL Small PPO.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Proposal Raw Cut Creative Hybrid.pdf",
+    "output": "output\\Proposal Raw Cut Creative Hybrid.json",
+    "plans": 0
+  },
+  {
+    "file": "source\\proposals\\Proposal Raw Cut Creative LargePPO.pdf",
+    "output": "output\\Proposal Raw Cut Creative LargePPO.json",
+    "plans": 0
+  }
+]

@@ -1,0 +1,11 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pdfplumber>=0.11.0
+openpyxl>=3.1.0
+aiohttp>=3.9.0
+pydantic>=2.5.0
+# v2 pipeline — OCR fallback for scanned PDFs (optional: gracefully disabled if not installed)
+pdf2image>=1.17.0
+pytesseract>=0.3.10
+

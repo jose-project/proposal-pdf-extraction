@@ -1,0 +1,437 @@
+"""
+Smart PDF extraction pipeline (v2).
+
+Orchestrates the full v2 pipeline:
+  1. Cache lookup    — return immediately for repeated uploads.
+  2. OCR fallback    — detect and OCR-scan any scanned/image pages.
+  3. Context extract — pull carrier name and effective date from cover page.
+  4. Smart chunking  — page scoring + continuity-aware grouping.
+  5. LLM extraction  — same RemoteLLM / Qwen endpoint as v1.
+  6. Normalisation   — reuses all v1 helpers (extract_json, normalize_plan …).
+  7. Cache store     — save result for future identical uploads.
+
+The output schema is identical to v1 so existing callers need no changes.
+"""
+
+import asyncio
+import json
+import logging
+from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from scripts.llm_pdf_extractor import (
+    SYSTEM_PROMPT,
+    PlanEntry,
+    extract_json,
+    normalize_plan,
+)
+from scripts.ocr_processor import get_page_text_with_ocr_fallback, is_scanned_page
+from scripts.remote_llm import RemoteLLM
+from scripts.timing import TimingRecorder
+from scripts.result_cache import get_cache
+from scripts.smart_pdf_processor import (
+    MAX_CHARS_V2,
+    PAGES_PER_CHUNK_V2,
+    SCORE_THRESHOLD,
+    build_smart_chunks,
+    extract_document_context,
+)
+
+import pdfplumber
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# v2 defaults
+# ---------------------------------------------------------------------------
+
+SMART_MAX_CONCURRENT = 5
+SMART_MAX_TOKENS = 4096
+SMART_RETRY_COUNT = 2
+
+# ---------------------------------------------------------------------------
+# Prompt helpers
+# ---------------------------------------------------------------------------
+
+_CONTEXT_BLOCK_TEMPLATE = (
+    "Document context — use this to fill in missing carrier/plan fields:\n"
+    "  Carrier : {carrier}\n"
+    "  Effective date: {date}\n\n"
+)
+
+_USER_PROMPT_TEMPLATE = (
+    "File: {pdf_name}, Pages: {page_range}\n"
+    "{context}"
+    "{page_text}\n\n"
+    "Return JSON only (no markdown, no explanation)."
+)
+
+
+def _build_user_prompt(
+    pdf_name: str,
+    page_numbers: List[int],
+    page_text: str,
+    context_carrier: Optional[str],
+    context_date: Optional[str],
+) -> str:
+    """Assemble the user prompt, optionally prepending document-level context."""
+    page_range = (
+        f"{page_numbers[0]}-{page_numbers[-1]}"
+        if len(page_numbers) > 1
+        else str(page_numbers[0])
+    )
+
+    if context_carrier or context_date:
+        context_block = _CONTEXT_BLOCK_TEMPLATE.format(
+            carrier=context_carrier or "unknown",
+            date=context_date or "unknown",
+        )
+    else:
+        context_block = ""
+
+    return _USER_PROMPT_TEMPLATE.format(
+        pdf_name=pdf_name,
+        page_range=page_range,
+        context=context_block,
+        page_text=page_text,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Single-chunk processor (wraps RemoteLLM with retries)
+# ---------------------------------------------------------------------------
+
+async def _process_chunk_smart(
+    llm: RemoteLLM,
+    pdf_name: str,
+    page_numbers: List[int],
+    page_text: str,
+    context_carrier: Optional[str],
+    context_date: Optional[str],
+    max_tokens: int = SMART_MAX_TOKENS,
+    retries: int = SMART_RETRY_COUNT,
+) -> Dict[str, Any]:
+    """
+    Send one chunk to the LLM and return parsed JSON result.
+
+    Retries on JSON parse failure (up to *retries* times), appending a
+    reminder to return valid JSON on subsequent attempts.
+    """
+    page_range_str = (
+        f"{page_numbers[0]}-{page_numbers[-1]}"
+        if len(page_numbers) > 1
+        else str(page_numbers[0])
+    )
+    logger.info(
+        f"[v2] Chunk pages {page_range_str}: "
+        f"{len(page_numbers)} pages, {len(page_text)} chars"
+    )
+
+    # Hard-cap to avoid token overflows
+    if len(page_text) > 10_000:
+        page_text = page_text[:10_000] + "…[truncated]"
+        logger.warning(f"[v2] Chunk pages {page_range_str}: text truncated to 10 000 chars")
+
+    user_prompt = _build_user_prompt(
+        pdf_name, page_numbers, page_text, context_carrier, context_date
+    )
+
+    attempt = 0
+    last_error: Optional[str] = None
+
+    while attempt <= retries:
+        try:
+            response = await llm.chat(
+                SYSTEM_PROMPT,
+                user_prompt,
+                max_new_tokens=max_tokens,
+            )
+            data = extract_json(response)
+            if data is not None and isinstance(data, dict):
+                n_plans = len(data.get("plans", []))
+                logger.info(
+                    f"[v2] Chunk pages {page_range_str}: "
+                    f"{n_plans} plans, carrier={data.get('carrier')!r}"
+                )
+                return data
+
+            logger.warning(
+                f"[v2] Chunk pages {page_range_str}: "
+                f"JSON parse failed (attempt {attempt + 1})"
+            )
+            user_prompt += (
+                "\n\nCRITICAL: respond with ONLY valid JSON. "
+                "No markdown, no code blocks. Start with { end with }."
+            )
+        except Exception as exc:
+            last_error = str(exc)
+            logger.error(
+                f"[v2] Chunk pages {page_range_str} error (attempt {attempt + 1}): {exc}"
+            )
+            if attempt < retries:
+                await asyncio.sleep(0.5 * (attempt + 1))
+
+        attempt += 1
+
+    logger.warning(
+        f"[v2] Chunk pages {page_range_str}: gave up after {retries + 1} attempts. "
+        f"Last error: {last_error}"
+    )
+    return {"carrier": None, "plans": []}
+
+
+# ---------------------------------------------------------------------------
+# OCR pre-pass
+# ---------------------------------------------------------------------------
+
+def _collect_ocr_texts(pdf_path: Path) -> Dict[int, str]:
+    """
+    Scan every page; for scanned pages apply OCR.
+
+    Returns:
+        Dict mapping 1-based page number → OCR text for pages that needed OCR.
+        Pages that had sufficient pdfplumber text are NOT included.
+    """
+    ocr_texts: Dict[int, str] = {}
+    try:
+        with pdfplumber.open(pdf_path) as doc:
+            for idx, page in enumerate(doc.pages, start=1):
+                raw_text = (page.extract_text() or "").strip()
+                if is_scanned_page(raw_text):
+                    ocr_text, used = get_page_text_with_ocr_fallback(
+                        pdf_path, idx, raw_text
+                    )
+                    if used:
+                        ocr_texts[idx] = ocr_text
+    except Exception as exc:
+        logger.error(f"[v2] OCR pre-pass failed: {exc}")
+    return ocr_texts
+
+
+# ---------------------------------------------------------------------------
+# Main extraction entry point
+# ---------------------------------------------------------------------------
+
+async def extract_pdf_smart(
+    pdf_path: Path,
+    output_path: Path,
+    pdf_bytes: Optional[bytes] = None,
+    score_threshold: float = SCORE_THRESHOLD,
+    pages_per_chunk: int = PAGES_PER_CHUNK_V2,
+    max_chars: int = MAX_CHARS_V2,
+    max_concurrent: int = SMART_MAX_CONCURRENT,
+    max_tokens: int = SMART_MAX_TOKENS,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Extract insurance plan rates from a PDF using the v2 smart pipeline.
+
+    The output schema is identical to v1:
+    {
+        "file": str,
+        "carrier": str | null,
+        "plans": [ { plan_name, plan_id, rate_structure, rates, source_pages } ]
+    }
+
+    Args:
+        pdf_path:       Path to the PDF file on disk.
+        output_path:    Where to write the JSON result file.
+        pdf_bytes:      Raw PDF bytes (used for cache lookup/store).
+                        If None, read from pdf_path.
+        score_threshold: Pages below this relevance score are skipped.
+        pages_per_chunk: Max pages per LLM call.
+        max_chars:      Max characters per LLM chunk.
+        max_concurrent: Max parallel LLM requests.
+        max_tokens:     Max tokens in each LLM response.
+        start_page:     First page to process (1-based, optional).
+        end_page:       Last page to process (1-based, optional).
+    """
+    recorder = TimingRecorder()
+
+    logger.info(
+        f"[v2] Starting extraction: {pdf_path.name} "
+        f"(threshold={score_threshold}, pages_per_chunk={pages_per_chunk}, "
+        f"max_chars={max_chars}, max_concurrent={max_concurrent})"
+    )
+
+    # ------------------------------------------------------------------
+    # Step 1: Cache lookup
+    # ------------------------------------------------------------------
+    cache = get_cache()
+
+    if pdf_bytes is None:
+        pdf_bytes = pdf_path.read_bytes()
+
+    with recorder.measure("cache_lookup"):
+        cached = cache.get(pdf_bytes)
+
+    if cached is not None:
+        logger.info(f"[v2] Cache hit — returning cached result for {pdf_path.name}")
+        cached["timing"] = recorder.summary()
+        cached["timing"]["cache_hit"] = True
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(cached, indent=2), encoding="utf-8")
+        recorder.log(logger, label=pdf_path.name)
+        return cached
+
+    # ------------------------------------------------------------------
+    # Step 2: OCR pre-pass
+    # ------------------------------------------------------------------
+    with recorder.measure("ocr_prepass"):
+        ocr_texts = _collect_ocr_texts(pdf_path)
+    if ocr_texts:
+        logger.info(f"[v2] OCR applied to {len(ocr_texts)} scanned page(s).")
+
+    # ------------------------------------------------------------------
+    # Step 3: Document-level context
+    # ------------------------------------------------------------------
+    with recorder.measure("context_extraction"):
+        context_carrier, context_date = extract_document_context(pdf_path)
+
+    # ------------------------------------------------------------------
+    # Step 4: Smart chunking (page scoring + continuity-aware grouping)
+    # ------------------------------------------------------------------
+    with recorder.measure("scoring_chunking"):
+        chunks = build_smart_chunks(
+            pdf_path,
+            ocr_texts=ocr_texts,
+            score_threshold=score_threshold,
+            pages_per_chunk=pages_per_chunk,
+            max_chars=max_chars,
+            start_page=start_page,
+            end_page=end_page,
+        )
+
+    if not chunks:
+        logger.warning(f"[v2] No chunks produced for {pdf_path.name}.")
+        output = {"file": str(pdf_path), "carrier": None, "plans": [], "timing": recorder.summary()}
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+        cache.set(pdf_bytes, output)
+        recorder.log(logger, label=pdf_path.name)
+        return output
+
+    logger.info(f"[v2] {len(chunks)} chunks to process.")
+
+    # ------------------------------------------------------------------
+    # Step 5: Parallel LLM extraction
+    # ------------------------------------------------------------------
+    llm = RemoteLLM()
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def _call(page_numbers: List[int], text: str) -> Dict[str, Any]:
+        async with semaphore:
+            with recorder.measure("llm_call", accumulate=True):
+                return await _process_chunk_smart(
+                    llm,
+                    pdf_path.name,
+                    page_numbers,
+                    text,
+                    context_carrier,
+                    context_date,
+                    max_tokens=max_tokens,
+                )
+
+    tasks = [_call(pns, txt) for pns, txt in chunks]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # ------------------------------------------------------------------
+    # Step 6: Merge and normalise (same logic as v1)
+    # ------------------------------------------------------------------
+    with recorder.measure("merge_normalise"):
+        carriers: List[str] = []
+        plans: Dict[str, PlanEntry] = {}
+
+        for chunk_idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"[v2] Chunk {chunk_idx + 1} raised exception: {result}")
+                continue
+            if not isinstance(result, dict):
+                continue
+
+            carrier_val = result.get("carrier")
+            if isinstance(carrier_val, str) and carrier_val.strip():
+                carriers.append(carrier_val.strip())
+
+            for plan_raw in result.get("plans", []):
+                if not isinstance(plan_raw, dict):
+                    continue
+                entry = normalize_plan(plan_raw, chunks[chunk_idx][0])
+                if not entry:
+                    continue
+
+                # Deduplication key — same logic as v1
+                import re as _re
+                plan_identifier = entry.plan_name or f"plan-{len(plans)}"
+                plan_id_str = entry.plan_id or ""
+                column_suffix = ""
+                col_match = _re.search(r"(?:Col|Column)\s+(\d+)", plan_identifier)
+                if col_match:
+                    column_suffix = f"-col{col_match.group(1)}"
+                idx_match = _re.search(r"Index-(\d+)", plan_identifier)
+                if idx_match:
+                    column_suffix += f"-idx{idx_match.group(1)}"
+
+                page_key = f"page-{chunks[chunk_idx][0][0]}"
+                key = "::".join(
+                    [
+                        plan_id_str,
+                        plan_identifier + column_suffix,
+                        entry.rate_structure or "",
+                        page_key,
+                    ]
+                )
+
+                if key not in plans:
+                    plans[key] = entry
+                else:
+                    plans[key].source_pages = sorted(
+                        set(plans[key].source_pages + entry.source_pages)
+                    )
+
+        # Prefer context_carrier if LLM didn't detect one
+        carrier_value: Optional[str] = None
+        if carriers:
+            carrier_value = Counter(carriers).most_common(1)[0][0]
+        if not carrier_value and context_carrier:
+            carrier_value = context_carrier
+
+    # ------------------------------------------------------------------
+    # Step 7: Build output, write file, store in cache
+    # ------------------------------------------------------------------
+    timing_summary = recorder.summary()
+    timing_summary["cache_hit"] = False
+    timing_summary["chunks"] = len(chunks)
+    timing_summary["ocr_pages"] = len(ocr_texts)
+
+    output = {
+        "file": str(pdf_path),
+        "carrier": carrier_value,
+        "plans": [
+            {
+                "plan_name": p.plan_name,
+                "plan_id": p.plan_id,
+                "rate_structure": p.rate_structure,
+                "rates": p.rates,
+                "source_pages": p.source_pages,
+            }
+            for p in plans.values()
+        ],
+        "timing": timing_summary,
+    }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+
+    cache.set(pdf_bytes, output)
+
+    recorder.log(logger, label=pdf_path.name)
+    logger.info(
+        f"[v2] Extraction complete: {len(plans)} plans, "
+        f"carrier={carrier_value!r}, output → {output_path}"
+    )
+
+    await llm.close()
+    return output

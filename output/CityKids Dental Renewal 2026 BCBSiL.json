@@ -1,0 +1,789 @@
+{
+  "file": "source\\proposals\\CityKids Dental Renewal 2026 BCBSiL.pdf",
+  "carrier": "Blue Cross and Blue Shield of Illinois",
+  "plans": [
+    {
+      "plan_id": "P5E2BCE",
+      "tiers": {
+        "employee_only": 1123.57,
+        "employee_spouse": 2247.14,
+        "employee_child": 2078.6,
+        "family": 3202.17
+      }
+    },
+    {
+      "plan_id": "P5E1BCE",
+      "tiers": {
+        "employee_only": 1126.05,
+        "employee_spouse": 2252.1,
+        "employee_child": 2083.19,
+        "family": 3209.24
+      }
+    },
+    {
+      "plan_id": "P5M1BCE",
+      "tiers": {
+        "employee_only": 1113.56,
+        "employee_spouse": 2227.12,
+        "employee_child": 2060.09,
+        "family": 3173.65
+      }
+    },
+    {
+      "plan_id": "G534BCE",
+      "tiers": {
+        "employee_only": 949.6,
+        "employee_spouse": 1899.2,
+        "employee_child": 1756.76,
+        "family": 2706.36
+      }
+    },
+    {
+      "plan_id": "G532BCE",
+      "tiers": {
+        "employee_only": 955.25,
+        "employee_spouse": 1910.5,
+        "employee_child": 1767.21,
+        "family": 2722.46
+      }
+    },
+    {
+      "plan_id": "G536BCE",
+      "tiers": {
+        "employee_only": 946.18,
+        "employee_spouse": 1892.36,
+        "employee_child": 1750.43,
+        "family": 2696.61
+      }
+    },
+    {
+      "plan_id": "G5M2BCE",
+      "tiers": {
+        "employee_only": 987.86,
+        "employee_spouse": 1975.72,
+        "employee_child": 1827.54,
+        "family": 2815.4
+      }
+    },
+    {
+      "plan_id": "G531BCE",
+      "tiers": {
+        "employee_only": 961.37,
+        "employee_spouse": 1922.74,
+        "employee_child": 1778.53,
+        "family": 2739.9
+      }
+    },
+    {
+      "plan_id": "G537BCE",
+      "tiers": {
+        "employee_only": 955.01,
+        "employee_spouse": 1910.02,
+        "employee_child": 1766.77,
+        "family": 2721.78
+      }
+    },
+    {
+      "plan_id": "G530BCE",
+      "tiers": {
+        "employee_only": 935.46,
+        "employee_spouse": 1870.92,
+        "employee_child": 1730.6,
+        "family": 2666.06
+      }
+    },
+    {
+      "plan_id": "S532BCE",
+      "tiers": {
+        "employee_only": 834.71,
+        "employee_spouse": 1669.42,
+        "employee_child": 1544.21,
+        "family": 2378.92
+      }
+    },
+    {
+      "plan_id": "S531BCE",
+      "tiers": {
+        "employee_only": 829.64,
+        "employee_spouse": 1659.28,
+        "employee_child": 1534.83,
+        "family": 2364.47
+      }
+    },
+    {
+      "plan_id": "S535BCE",
+      "tiers": {
+        "employee_only": 828.71,
+        "employee_spouse": 1657.42,
+        "employee_child": 1533.11,
+        "family": 2361.82
+      }
+    },
+    {
+      "plan_id": "G533BCE",
+      "tiers": {
+        "employee_only": 921.59,
+        "employee_spouse": 1843.18,
+        "employee_child": 1704.94,
+        "family": 2626.53
+      }
+    },
+    {
+      "plan_id": "G535BCE",
+      "tiers": {
+        "employee_only": 886.15,
+        "employee_spouse": 1772.3,
+        "employee_child": 1639.38,
+        "family": 2525.53
+      }
+    },
+    {
+      "plan_id": "S534BCE",
+      "tiers": {
+        "employee_only": 827.88,
+        "employee_spouse": 1655.76,
+        "employee_child": 1531.58,
+        "family": 2359.46
+      }
+    },
+    {
+      "plan_id": "S5J1BCE",
+      "tiers": {
+        "employee_only": 816.7,
+        "employee_spouse": 1633.4,
+        "employee_child": 1510.9,
+        "family": 2327.6
+      }
+    },
+    {
+      "plan_id": "B536BCE",
+      "tiers": {
+        "employee_only": 761.95,
+        "employee_spouse": 1523.9,
+        "employee_child": 1409.61,
+        "family": 2171.56
+      }
+    },
+    {
+      "plan_id": "B535BCE",
+      "tiers": {
+        "employee_only": 773.61,
+        "employee_spouse": 1547.22,
+        "employee_child": 1431.18,
+        "family": 2204.79
+      }
+    },
+    {
+      "plan_id": "B5N1BCE",
+      "tiers": {
+        "employee_only": 752.31,
+        "employee_spouse": 1504.62,
+        "employee_child": 1391.77,
+        "family": 2144.08
+      }
+    },
+    {
+      "plan_id": "P506PSN*1",
+      "tiers": {
+        "employee_only": 803.48,
+        "employee_spouse": 1606.96,
+        "employee_child": 1486.44,
+        "family": 2289.92
+      }
+    },
+    {
+      "plan_id": "P5J1PSN*1",
+      "tiers": {
+        "employee_only": 798.56,
+        "employee_spouse": 1597.12,
+        "employee_child": 1477.34,
+        "family": 2275.9
+      }
+    },
+    {
+      "plan_id": "P5E1PSN*1",
+      "tiers": {
+        "employee_only": 767.73,
+        "employee_spouse": 1535.46,
+        "employee_child": 1420.3,
+        "family": 2188.03
+      }
+    },
+    {
+      "plan_id": "G5J2PSN*1",
+      "tiers": {
+        "employee_only": 720.55,
+        "employee_spouse": 1441.1,
+        "employee_child": 1333.02,
+        "family": 2053.57
+      }
+    },
+    {
+      "plan_id": "G5N1PSN*1",
+      "tiers": {
+        "employee_only": 685.58,
+        "employee_spouse": 1371.16,
+        "employee_child": 1268.32,
+        "family": 1953.9
+      }
+    },
+    {
+      "plan_id": "G532PSN*1",
+      "tiers": {
+        "employee_only": 669.19,
+        "employee_spouse": 1338.38,
+        "employee_child": 1238.0,
+        "family": 1907.19
+      }
+    },
+    {
+      "plan_id": "S531PSN*1",
+      "tiers": {
+        "employee_only": 616.22,
+        "employee_spouse": 1232.44,
+        "employee_child": 1140.01,
+        "family": 1756.23
+      }
+    },
+    {
+      "plan_id": "S530PSN*1",
+      "tiers": {
+        "employee_only": 609.59,
+        "employee_spouse": 1219.18,
+        "employee_child": 1127.74,
+        "family": 1737.33
+      }
+    },
+    {
+      "plan_id": "P5N1OPT",
+      "tiers": {
+        "employee_only": 1196.84,
+        "employee_spouse": 2393.68,
+        "employee_child": 2214.15,
+        "family": 3410.99
+      }
+    },
+    {
+      "plan_id": "G506OPT",
+      "tiers": {
+        "employee_only": 1018.52,
+        "employee_spouse": 2037.04,
+        "employee_child": 1884.26,
+        "family": 2902.78
+      }
+    },
+    {
+      "plan_id": "G508OPT",
+      "tiers": {
+        "employee_only": 1019.15,
+        "employee_spouse": 2038.3,
+        "employee_child": 1885.43,
+        "family": 2904.58
+      }
+    },
+    {
+      "plan_id": "G507OPT",
+      "tiers": {
+        "employee_only": 1033.99,
+        "employee_spouse": 2067.98,
+        "employee_child": 1912.88,
+        "family": 2946.87
+      }
+    },
+    {
+      "plan_id": "G5M3OPT",
+      "tiers": {
+        "employee_only": 1016.98,
+        "employee_spouse": 2033.96,
+        "employee_child": 1881.41,
+        "family": 2898.39
+      }
+    },
+    {
+      "plan_id": "S506OPT",
+      "tiers": {
+        "employee_only": 885.88,
+        "employee_spouse": 1771.76,
+        "employee_child": 1638.88,
+        "family": 2524.76
+      }
+    },
+    {
+      "plan_id": "G5K1OPT",
+      "tiers": {
+        "employee_only": 994.58,
+        "employee_spouse": 1989.16,
+        "employee_child": 1839.97,
+        "family": 2834.55
+      }
+    },
+    {
+      "plan_id": "S507OPT",
+      "tiers": {
+        "employee_only": 883.07,
+        "employee_spouse": 1766.14,
+        "employee_child": 1633.68,
+        "family": 2516.75
+      }
+    },
+    {
+      "plan_id": "S5N1OPT",
+      "tiers": {
+        "employee_only": 886.52,
+        "employee_spouse": 1773.04,
+        "employee_child": 1640.06,
+        "family": 2526.58
+      }
+    },
+    {
+      "plan_id": "P503PPO",
+      "tiers": {
+        "employee_only": 1407.14,
+        "employee_spouse": 2814.28,
+        "employee_child": 2603.21,
+        "family": 4010.35
+      }
+    },
+    {
+      "plan_id": "P5E1PPO",
+      "tiers": {
+        "employee_only": 1409.64,
+        "employee_spouse": 2819.28,
+        "employee_child": 2607.83,
+        "family": 4017.47
+      }
+    },
+    {
+      "plan_id": "P5M1PPO",
+      "tiers": {
+        "employee_only": 1394.11,
+        "employee_spouse": 2788.22,
+        "employee_child": 2579.1,
+        "family": 3973.21
+      }
+    },
+    {
+      "plan_id": "G534PPO",
+      "tiers": {
+        "employee_only": 1192.82,
+        "employee_spouse": 2385.64,
+        "employee_child": 2206.72,
+        "family": 3399.54
+      }
+    },
+    {
+      "plan_id": "G532PPO",
+      "tiers": {
+        "employee_only": 1200.31,
+        "employee_spouse": 2400.62,
+        "employee_child": 2220.57,
+        "family": 3420.88
+      }
+    },
+    {
+      "plan_id": "G536PPO",
+      "tiers": {
+        "employee_only": 1189.75,
+        "employee_spouse": 2379.5,
+        "employee_child": 2201.04,
+        "family": 3390.79
+      }
+    },
+    {
+      "plan_id": "G5M2PPO",
+      "tiers": {
+        "employee_only": 1240.04,
+        "employee_spouse": 2480.08,
+        "employee_child": 2294.07,
+        "family": 3534.11
+      }
+    },
+    {
+      "plan_id": "G531PPO",
+      "tiers": {
+        "employee_only": 1208.22,
+        "employee_spouse": 2416.44,
+        "employee_child": 2235.21,
+        "family": 3443.43
+      }
+    },
+    {
+      "plan_id": "G537PPO",
+      "tiers": {
+        "employee_only": 1200.9,
+        "employee_spouse": 2401.8,
+        "employee_child": 2221.67,
+        "family": 3422.57
+      }
+    },
+    {
+      "plan_id": "G530PPO",
+      "tiers": {
+        "employee_only": 1176.41,
+        "employee_spouse": 2352.82,
+        "employee_child": 2176.36,
+        "family": 3352.77
+      }
+    },
+    {
+      "plan_id": "S532PPO",
+      "tiers": {
+        "employee_only": 1052.54,
+        "employee_spouse": 2105.08,
+        "employee_child": 1947.2,
+        "family": 2999.74
+      }
+    },
+    {
+      "plan_id": "S531PPO",
+      "tiers": {
+        "employee_only": 1045.95,
+        "employee_spouse": 2091.9,
+        "employee_child": 1935.01,
+        "family": 2980.96
+      }
+    },
+    {
+      "plan_id": "S535PPO",
+      "tiers": {
+        "employee_only": 1044.77,
+        "employee_spouse": 2089.54,
+        "employee_child": 1932.82,
+        "family": 2977.59
+      }
+    },
+    {
+      "plan_id": "G533PPO",
+      "tiers": {
+        "employee_only": 1161.31,
+        "employee_spouse": 2322.62,
+        "employee_child": 2148.42,
+        "family": 3309.73
+      }
+    },
+    {
+      "plan_id": "G535PPO",
+      "tiers": {
+        "employee_only": 1118.21,
+        "employee_spouse": 2236.42,
+        "employee_child": 2068.69,
+        "family": 3186.9
+      }
+    },
+    {
+      "plan_id": "S534PPO",
+      "tiers": {
+        "employee_only": 1045.07,
+        "employee_spouse": 2090.14,
+        "employee_child": 1933.38,
+        "family": 2978.45
+      }
+    },
+    {
+      "plan_id": "S5J1PPO",
+      "tiers": {
+        "employee_only": 1032.16,
+        "employee_spouse": 2064.32,
+        "employee_child": 1909.5,
+        "family": 2941.66
+      }
+    },
+    {
+      "plan_id": "B536PPO",
+      "tiers": {
+        "employee_only": 965.32,
+        "employee_spouse": 1930.64,
+        "employee_child": 1785.84,
+        "family": 2751.16
+      }
+    },
+    {
+      "plan_id": "B535PPO",
+      "tiers": {
+        "employee_only": 978.66,
+        "employee_spouse": 1957.32,
+        "employee_child": 1810.52,
+        "family": 2789.18
+      }
+    },
+    {
+      "plan_id": "B5N1PPO",
+      "tiers": {
+        "employee_only": 953.58,
+        "employee_spouse": 1907.16,
+        "employee_child": 1764.12,
+        "family": 2717.7
+      }
+    },
+    {
+      "plan_id": "DILHR30*5*6",
+      "tiers": {
+        "employee_only": 81.11,
+        "employee_spouse": 162.22,
+        "employee_child": 198.72,
+        "family": 320.38
+      }
+    },
+    {
+      "plan_id": "DILHR31*5*6",
+      "tiers": {
+        "employee_only": 68.3,
+        "employee_spouse": 136.6,
+        "employee_child": 167.34,
+        "family": 269.79
+      }
+    },
+    {
+      "plan_id": "DILHR32*5*6",
+      "tiers": {
+        "employee_only": 64.36,
+        "employee_spouse": 128.72,
+        "employee_child": 157.68,
+        "family": 254.22
+      }
+    },
+    {
+      "plan_id": "DILHR33*5*6",
+      "tiers": {
+        "employee_only": 58.04,
+        "employee_spouse": 116.08,
+        "employee_child": 142.2,
+        "family": 229.26
+      }
+    },
+    {
+      "plan_id": "DILHR34*6",
+      "tiers": {
+        "employee_only": 45.76,
+        "employee_spouse": 91.52,
+        "employee_child": 112.11,
+        "family": 180.75
+      }
+    },
+    {
+      "plan_id": "DILHR35*6",
+      "tiers": {
+        "employee_only": 69.37,
+        "employee_spouse": 138.74,
+        "employee_child": 169.96,
+        "family": 274.01
+      }
+    },
+    {
+      "plan_id": "DILHM38*5",
+      "tiers": {
+        "employee_only": 38.35,
+        "employee_spouse": 76.7,
+        "employee_child": 93.96,
+        "family": 151.48
+      }
+    },
+    {
+      "plan_id": "DILHM40",
+      "tiers": {
+        "employee_only": 34.86,
+        "employee_spouse": 69.72,
+        "employee_child": 85.41,
+        "family": 137.7
+      }
+    },
+    {
+      "plan_id": "DILHM42*3*5",
+      "tiers": {
+        "employee_only": 19.7,
+        "employee_spouse": 39.4,
+        "employee_child": 48.27,
+        "family": 77.82
+      }
+    },
+    {
+      "plan_id": "DILHR50*5",
+      "tiers": {
+        "employee_only": 53.93,
+        "employee_spouse": 107.86,
+        "employee_child": 132.13,
+        "family": 213.02
+      }
+    },
+    {
+      "plan_id": "DILHM57*5*6",
+      "tiers": {
+        "employee_only": 52.65,
+        "employee_spouse": 105.3,
+        "employee_child": 128.99,
+        "family": 207.97
+      }
+    },
+    {
+      "plan_id": "DILHR61*5",
+      "tiers": {
+        "employee_only": 60.7,
+        "employee_spouse": 121.4,
+        "employee_child": 148.72,
+        "family": 239.77
+      }
+    },
+    {
+      "plan_id": "DILLR36*5",
+      "tiers": {
+        "employee_only": 45.31,
+        "employee_spouse": 90.62,
+        "employee_child": 111.01,
+        "family": 178.97
+      }
+    },
+    {
+      "plan_id": "DILLM41",
+      "tiers": {
+        "employee_only": 25.36,
+        "employee_spouse": 50.72,
+        "employee_child": 62.13,
+        "family": 100.17
+      }
+    },
+    {
+      "plan_id": "DILLM51*5",
+      "tiers": {
+        "employee_only": 34.95,
+        "employee_spouse": 69.9,
+        "employee_child": 85.63,
+        "family": 138.05
+      }
+    },
+    {
+      "plan_id": "DILLR58*4*5",
+      "tiers": {
+        "employee_only": 48.85,
+        "employee_spouse": 97.7,
+        "employee_child": 119.68,
+        "family": 192.96
+      }
+    },
+    {
+      "plan_id": "DILLR62*5",
+      "tiers": {
+        "employee_only": 53.24,
+        "employee_spouse": 106.48,
+        "employee_child": 130.44,
+        "family": 210.3
+      }
+    },
+    {
+      "plan_id": "DILHR43*1*5",
+      "tiers": {
+        "employee_only": 61.51,
+        "employee_spouse": 123.02,
+        "employee_child": 150.7,
+        "family": 242.96
+      }
+    },
+    {
+      "plan_id": "DILHM44*1",
+      "tiers": {
+        "employee_only": 37.61,
+        "employee_spouse": 75.22,
+        "employee_child": 92.14,
+        "family": 148.56
+      }
+    },
+    {
+      "plan_id": "DILHR45*1",
+      "tiers": {
+        "employee_only": 59.24,
+        "employee_spouse": 118.48,
+        "employee_child": 145.14,
+        "family": 234.0
+      }
+    },
+    {
+      "plan_id": "DILHM46*3*5",
+      "tiers": {
+        "employee_only": 21.66,
+        "employee_spouse": 43.32,
+        "employee_child": 53.07,
+        "family": 85.56
+      }
+    },
+    {
+      "plan_id": "DILHR53*1*5",
+      "tiers": {
+        "employee_only": 58.13,
+        "employee_spouse": 116.26,
+        "employee_child": 142.42,
+        "family": 229.61
+      }
+    },
+    {
+      "plan_id": "DILHM59*1*5",
+      "tiers": {
+        "employee_only": 55.75,
+        "employee_spouse": 111.5,
+        "employee_child": 136.59,
+        "family": 220.21
+      }
+    },
+    {
+      "plan_id": "DILLR47*1*5",
+      "tiers": {
+        "employee_only": 53.78,
+        "employee_spouse": 107.56,
+        "employee_child": 131.76,
+        "family": 212.43
+      }
+    },
+    {
+      "plan_id": "DILLR48*1*5",
+      "tiers": {
+        "employee_only": 56.13,
+        "employee_spouse": 112.26,
+        "employee_child": 137.52,
+        "family": 221.71
+      }
+    },
+    {
+      "plan_id": "DILLM49*1*5",
+      "tiers": {
+        "employee_only": 33.5,
+        "employee_spouse": 67.0,
+        "employee_child": 82.08,
+        "family": 132.33
+      }
+    },
+    {
+      "plan_id": "DILLR54*1*5",
+      "tiers": {
+        "employee_only": 48.99,
+        "employee_spouse": 97.98,
+        "employee_child": 120.03,
+        "family": 193.51
+      }
+    },
+    {
+      "plan_id": "DILLM55*1*5",
+      "tiers": {
+        "employee_only": 37.82,
+        "employee_spouse": 75.64,
+        "employee_child": 92.66,
+        "family": 149.39
+      }
+    },
+    {
+      "plan_id": "DILLM56*1",
+      "tiers": {
+        "employee_only": 31.68,
+        "employee_spouse": 63.36,
+        "employee_child": 77.62,
+        "family": 125.14
+      }
+    },
+    {
+      "plan_id": "DILLR60*1*4*5",
+      "tiers": {
+        "employee_only": 52.86,
+        "employee_spouse": 105.72,
+        "employee_child": 129.51,
+        "family": 208.8
+      }
+    }
+  ]
+}

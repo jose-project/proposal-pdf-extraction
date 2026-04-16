@@ -1,0 +1,126 @@
+"""
+Lightweight timing utility for PDF extraction pipelines.
+
+Usage
+-----
+    recorder = TimingRecorder()
+
+    with recorder.measure("ocr_prepass"):
+        ...
+
+    # LLM chunks — each call appended to a list
+    with recorder.measure("llm_call", accumulate=True):
+        ...
+
+    summary = recorder.summary()
+    # {
+    #   "ocr_prepass_s": 0.42,
+    #   "llm_call_s": {"count": 3, "total": 9.41, "min": 2.87, "max": 3.91, "avg": 3.14},
+    #   "total_s": 9.85
+    # }
+
+    recorder.log(logger, label="my_pdf.pdf")
+"""
+
+import logging
+import time
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List, Union
+
+
+class TimingRecorder:
+    """
+    Accumulates named durations measured via context managers.
+
+    Two modes per key:
+    - scalar  (default)    — stores the most-recent elapsed time for that key.
+    - accumulate=True      — appends each elapsed time to a list, enabling
+                             min/max/avg stats (useful for repeated LLM calls).
+    """
+
+    def __init__(self) -> None:
+        self._start: float = time.perf_counter()
+        self._scalars: Dict[str, float] = {}
+        self._lists: Dict[str, List[float]] = {}
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    @contextmanager
+    def measure(self, key: str, accumulate: bool = False) -> Generator[None, None, None]:
+        """
+        Context manager that times the enclosed block and records it under *key*.
+
+        Args:
+            key:        Name of the phase (e.g. "ocr_prepass", "llm_call").
+            accumulate: If True, append the duration to a list instead of
+                        overwriting the scalar.  Use this for repeated operations
+                        (e.g. one entry per LLM chunk call).
+        """
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed = time.perf_counter() - t0
+            if accumulate:
+                self._lists.setdefault(key, []).append(elapsed)
+            else:
+                self._scalars[key] = elapsed
+
+    def summary(self) -> Dict[str, Any]:
+        """
+        Return a dict suitable for JSON serialisation or API response.
+
+        Scalar keys  → ``"<key>_s": float``
+        List keys    → ``"<key>_s": {count, total, min, max, avg}``
+        Total        → ``"total_s": float``  (wall-clock from construction)
+        """
+        out: Dict[str, Any] = {}
+
+        for key, value in self._scalars.items():
+            out[f"{key}_s"] = round(value, 3)
+
+        for key, values in self._lists.items():
+            if values:
+                out[f"{key}_s"] = {
+                    "count": len(values),
+                    "total": round(sum(values), 3),
+                    "min":   round(min(values), 3),
+                    "max":   round(max(values), 3),
+                    "avg":   round(sum(values) / len(values), 3),
+                }
+            else:
+                out[f"{key}_s"] = {"count": 0, "total": 0.0, "min": 0.0, "max": 0.0, "avg": 0.0}
+
+        out["total_s"] = round(time.perf_counter() - self._start, 3)
+        return out
+
+    def log(self, logger: logging.Logger, label: str = "") -> None:
+        """
+        Write a structured timing report to *logger* at INFO level.
+
+        Args:
+            logger: Logger instance to write to.
+            label:  Optional prefix (e.g. PDF filename) for context.
+        """
+        s = self.summary()
+        prefix = f"[timing] {label} " if label else "[timing] "
+
+        lines = [f"{prefix}breakdown:"]
+        for key, value in s.items():
+            if key == "total_s":
+                continue
+            if isinstance(value, dict):
+                lines.append(
+                    f"  {key:<30} count={value['count']}  "
+                    f"total={value['total']:.3f}s  "
+                    f"avg={value['avg']:.3f}s  "
+                    f"min={value['min']:.3f}s  "
+                    f"max={value['max']:.3f}s"
+                )
+            else:
+                lines.append(f"  {key:<30} {value:.3f}s")
+
+        lines.append(f"  {'total_s':<30} {s['total_s']:.3f}s")
+        logger.info("\n".join(lines))

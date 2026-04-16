@@ -1,0 +1,44 @@
+"""
+Constants and configuration for PDF extraction.
+"""
+
+# Default values
+# Number of pages grouped per LLM request
+# 2 pages per chunk captures rate tables that span page boundaries
+DEFAULT_PAGES_PER_CHUNK = 2
+
+# Maximum characters allowed per chunk before we split/truncate
+DEFAULT_MAX_CHARS = 6000
+
+# Maximum number of concurrent LLM requests
+# 2 cuts wall-clock time roughly in half; increase to 3-5 if the remote server handles it
+DEFAULT_MAX_CONCURRENT = 2
+
+# Maximum tokens requested from the LLM per response
+DEFAULT_MAX_TOKENS = 4096
+
+# Minimum useful content length for a page (shorter pages are skipped when filter_empty=True)
+DEFAULT_MIN_CONTENT_LENGTH = 100
+
+# Hard cap on text length actually sent to the LLM
+# Even if max_chars is higher, we truncate to this length for stability.
+DEFAULT_TEXT_TRUNCATE_LIMIT = 7000
+
+# Rate structure types
+RATE_STRUCTURES = [
+    "2_tier",
+    "3_tier",
+    "4_tier",
+    "5_tier",
+    "8_tier",
+    "aca_age",
+    "age_band_5",
+    "age_band_10",
+    "esc_5_year",
+    "esc_10_year",
+    "4_tier_5_year",
+    "4_tier_10_year",
+    "3_tier_age_band",
+    "2_tier_age_band",
+]
+
