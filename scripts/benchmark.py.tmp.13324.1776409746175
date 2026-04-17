@@ -268,11 +268,6 @@ async def benchmark(
 
 
 def main() -> None:
-    # Silence noisy loggers so benchmark table output is readable
-    logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("scripts").setLevel(logging.WARNING)
-    logging.getLogger("pdfplumber").setLevel(logging.ERROR)
-
     parser = argparse.ArgumentParser(
         description="Benchmark v1 vs v2 extraction pipelines."
     )

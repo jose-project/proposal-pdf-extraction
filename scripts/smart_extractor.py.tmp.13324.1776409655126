@@ -321,121 +321,117 @@ async def extract_pdf_smart(
     # ------------------------------------------------------------------
     llm = RemoteLLM()
     semaphore = asyncio.Semaphore(max_concurrent)
-    try:
 
-        async def _call(page_numbers: List[int], text: str) -> Dict[str, Any]:
-            async with semaphore:
-                with recorder.measure("llm_call", accumulate=True):
-                    return await _process_chunk_smart(
-                        llm,
-                        pdf_path.name,
-                        page_numbers,
-                        text,
-                        context_carrier,
-                        context_date,
-                        max_tokens=max_tokens,
+    async def _call(page_numbers: List[int], text: str) -> Dict[str, Any]:
+        async with semaphore:
+            with recorder.measure("llm_call", accumulate=True):
+                return await _process_chunk_smart(
+                    llm,
+                    pdf_path.name,
+                    page_numbers,
+                    text,
+                    context_carrier,
+                    context_date,
+                    max_tokens=max_tokens,
+                )
+
+    tasks = [_call(pns, txt) for pns, txt in chunks]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # ------------------------------------------------------------------
+    # Step 6: Merge and normalise (same logic as v1)
+    # ------------------------------------------------------------------
+    with recorder.measure("merge_normalise"):
+        carriers: List[str] = []
+        plans: Dict[str, PlanEntry] = {}
+
+        for chunk_idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"[v2] Chunk {chunk_idx + 1} raised exception: {result}")
+                continue
+            if not isinstance(result, dict):
+                continue
+
+            carrier_val = result.get("carrier")
+            if isinstance(carrier_val, str) and carrier_val.strip():
+                carriers.append(carrier_val.strip())
+
+            for plan_raw in result.get("plans", []):
+                if not isinstance(plan_raw, dict):
+                    continue
+                entry = normalize_plan(plan_raw, chunks[chunk_idx][0])
+                if not entry:
+                    continue
+
+                # Deduplication key — same logic as v1
+                plan_identifier = entry.plan_name or f"plan-{len(plans)}"
+                plan_id_str = entry.plan_id or ""
+                column_suffix = ""
+                col_match = re.search(r"(?:Col|Column)\s+(\d+)", plan_identifier)
+                if col_match:
+                    column_suffix = f"-col{col_match.group(1)}"
+                idx_match = re.search(r"Index-(\d+)", plan_identifier)
+                if idx_match:
+                    column_suffix += f"-idx{idx_match.group(1)}"
+
+                page_key = f"page-{chunks[chunk_idx][0][0]}"
+                key = "::".join(
+                    [
+                        plan_id_str,
+                        plan_identifier + column_suffix,
+                        entry.rate_structure or "",
+                        page_key,
+                    ]
+                )
+
+                if key not in plans:
+                    plans[key] = entry
+                else:
+                    plans[key].source_pages = sorted(
+                        set(plans[key].source_pages + entry.source_pages)
                     )
 
-        tasks = [_call(pns, txt) for pns, txt in chunks]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Prefer context_carrier if LLM didn't detect one
+        carrier_value: Optional[str] = None
+        if carriers:
+            carrier_value = Counter(carriers).most_common(1)[0][0]
+        if not carrier_value and context_carrier:
+            carrier_value = context_carrier
 
-        # ------------------------------------------------------------------
-        # Step 6: Merge and normalise (same logic as v1)
-        # ------------------------------------------------------------------
-        with recorder.measure("merge_normalise"):
-            carriers: List[str] = []
-            plans: Dict[str, PlanEntry] = {}
+    # ------------------------------------------------------------------
+    # Step 7: Build output, write file, store in cache
+    # ------------------------------------------------------------------
+    timing_summary = recorder.summary()
+    timing_summary["cache_hit"] = False
+    timing_summary["chunks"] = len(chunks)
+    timing_summary["ocr_pages"] = len(ocr_texts)
 
-            for chunk_idx, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"[v2] Chunk {chunk_idx + 1} raised exception: {result}")
-                    continue
-                if not isinstance(result, dict):
-                    continue
+    output = {
+        "file": str(pdf_path),
+        "carrier": carrier_value,
+        "plans": [
+            {
+                "plan_name": p.plan_name,
+                "plan_id": p.plan_id,
+                "rate_structure": p.rate_structure,
+                "rates": p.rates,
+                "source_pages": p.source_pages,
+            }
+            for p in plans.values()
+        ],
+        "timing": timing_summary,
+    }
 
-                carrier_val = result.get("carrier")
-                if isinstance(carrier_val, str) and carrier_val.strip():
-                    carriers.append(carrier_val.strip())
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
-                for plan_raw in result.get("plans", []):
-                    if not isinstance(plan_raw, dict):
-                        continue
-                    entry = normalize_plan(plan_raw, chunks[chunk_idx][0])
-                    if not entry:
-                        continue
+    cache.set(pdf_bytes, output)
 
-                    # Deduplication key — same logic as v1
-                    plan_identifier = entry.plan_name or f"plan-{len(plans)}"
-                    plan_id_str = entry.plan_id or ""
-                    column_suffix = ""
-                    col_match = re.search(r"(?:Col|Column)\s+(\d+)", plan_identifier)
-                    if col_match:
-                        column_suffix = f"-col{col_match.group(1)}"
-                    idx_match = re.search(r"Index-(\d+)", plan_identifier)
-                    if idx_match:
-                        column_suffix += f"-idx{idx_match.group(1)}"
+    recorder.log(logger, label=pdf_path.name)
+    logger.info(
+        f"[v2] Extraction complete: {len(plans)} plans, "
+        f"carrier={carrier_value!r}, output → {output_path}"
+    )
 
-                    page_key = f"page-{chunks[chunk_idx][0][0]}"
-                    key = "::".join(
-                        [
-                            plan_id_str,
-                            plan_identifier + column_suffix,
-                            entry.rate_structure or "",
-                            page_key,
-                        ]
-                    )
-
-                    if key not in plans:
-                        plans[key] = entry
-                    else:
-                        plans[key].source_pages = sorted(
-                            set(plans[key].source_pages + entry.source_pages)
-                        )
-
-            # Prefer context_carrier if LLM didn't detect one
-            carrier_value: Optional[str] = None
-            if carriers:
-                carrier_value = Counter(carriers).most_common(1)[0][0]
-            if not carrier_value and context_carrier:
-                carrier_value = context_carrier
-
-        # ------------------------------------------------------------------
-        # Step 7: Build output, write file, store in cache
-        # ------------------------------------------------------------------
-        timing_summary = recorder.summary()
-        timing_summary["cache_hit"] = False
-        timing_summary["chunks"] = len(chunks)
-        timing_summary["ocr_pages"] = len(ocr_texts)
-
-        output = {
-            "file": str(pdf_path),
-            "carrier": carrier_value,
-            "plans": [
-                {
-                    "plan_name": p.plan_name,
-                    "plan_id": p.plan_id,
-                    "rate_structure": p.rate_structure,
-                    "rates": p.rates,
-                    "source_pages": p.source_pages,
-                }
-                for p in plans.values()
-            ],
-            "timing": timing_summary,
-        }
-
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
-
-        cache.set(pdf_bytes, output)
-
-        recorder.log(logger, label=pdf_path.name)
-        logger.info(
-            f"[v2] Extraction complete: {len(plans)} plans, "
-            f"carrier={carrier_value!r}, output → {output_path}"
-        )
-
-        return output
-
-    finally:
-        await llm.close()
-        logger.debug("[v2] LLM session closed")
+    await llm.close()
+    return output
