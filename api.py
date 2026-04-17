@@ -168,7 +168,7 @@ async def process_pdf_upload(
     pdf: UploadFile,
     start_page: Optional[int] = None,
     end_page: Optional[int] = None,
-    include_timing: bool = False,
+    include_timing: bool = True,
 ) -> ExtractResponse:
     """
     Core function to process an uploaded PDF and extract rates.
@@ -260,7 +260,7 @@ async def process_pdf_upload(
 @app.post("/extract", response_model=ExtractResponse)
 async def extract_rates(
     pdf: UploadFile = File(..., description="PDF proposal file"),
-    include_timing: bool = False,
+    include_timing: bool = True,
 ):
     """
     Extract insurance plan rates from a PDF proposal.
@@ -286,7 +286,7 @@ async def extract_rates_range(
     pdf: UploadFile = File(..., description="PDF proposal file"),
     start_page: int = 1,
     end_page: int = 1,
-    include_timing: bool = False,
+    include_timing: bool = True,
 ):
     """
     Extract rates from a specific page range of a PDF proposal.
@@ -340,7 +340,7 @@ class ExtractBatchV2Response(BaseModel):
 @app.post("/extract-v2", response_model=ExtractResponse)
 async def extract_rates_v2(
     pdf: UploadFile = File(..., description="PDF proposal file"),
-    include_timing: bool = False,
+    include_timing: bool = True,
 ):
     """
     Extract insurance plan rates using the v2 smart pipeline.
