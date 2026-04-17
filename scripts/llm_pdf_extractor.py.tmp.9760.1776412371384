@@ -559,35 +559,18 @@ async def extract_pdf_with_llm(
     plans: Dict[str, PlanEntry] = {}
 
     try:
-        # Process chunks with concurrency limit
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def process_with_limit(page_numbers: List[int], text: str) -> Dict[str, Any]:
-            async with semaphore:
-                with recorder.measure("llm_call", accumulate=True):
-                    return await process_chunk(
-                        llm, pdf_path.name, page_numbers, text, max_tokens=max_tokens
-                    )
-
-        # Pipeline: dispatch each LLM task as soon as its chunk is ready so
-        # LLM calls overlap with the remaining PDF I/O instead of waiting for
-        # the entire document to be read first.
-        chunks: List[Tuple[List[int], str]] = []
-        tasks: List[asyncio.Task] = []
-        t_chunk_start = time.perf_counter()
-
-        async for page_numbers, text in _stream_chunks_async(
-            pdf_path,
-            pages_per_chunk=pages_per_chunk,
-            max_chars=max_chars,
-            filter_empty=filter_empty,
-            start_page=start_page,
-            end_page=end_page,
-        ):
-            chunks.append((page_numbers, text))
-            tasks.append(asyncio.create_task(process_with_limit(page_numbers, text)))
-
-        recorder.record("pdf_load_chunking", time.perf_counter() - t_chunk_start)
+        # Create chunks list for parallel processing
+        with recorder.measure("pdf_load_chunking"):
+            chunks = list(
+                chunk_pages(
+                    pdf_path,
+                    pages_per_chunk=pages_per_chunk,
+                    max_chars=max_chars,
+                    filter_empty=filter_empty,
+                    start_page=start_page,
+                    end_page=end_page,
+                )
+            )
 
         if not chunks:
             logger.warning(f"No chunks created from PDF: {pdf_path.name}")
@@ -603,7 +586,24 @@ async def extract_pdf_with_llm(
             recorder.log(logger, label=pdf_path.name)
             return output
 
-        logger.info(f"Started {len(tasks)} pipelined tasks (max_concurrent={max_concurrent})")
+        logger.info(f"Processing {len(chunks)} chunks with max_concurrent={max_concurrent}")
+
+        # Process chunks with concurrency limit
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_with_limit(page_numbers: List[int], text: str) -> Dict[str, Any]:
+            async with semaphore:
+                with recorder.measure("llm_call", accumulate=True):
+                    return await process_chunk(
+                        llm, pdf_path.name, page_numbers, text, max_tokens=max_tokens
+                    )
+
+        # Process all chunks in parallel (with concurrency limit)
+        tasks = [
+            process_with_limit(page_numbers, text)
+            for page_numbers, text in chunks
+        ]
+        logger.info(f"Started {len(tasks)} parallel processing tasks")
         results = await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"All {len(results)} tasks completed")
 
