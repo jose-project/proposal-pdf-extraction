@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # v2 defaults
 # ---------------------------------------------------------------------------
 
-SMART_MAX_CONCURRENT = 5
+SMART_MAX_CONCURRENT = 2
 SMART_MAX_TOKENS = 4096
 SMART_RETRY_COUNT = 2
 
@@ -171,7 +171,7 @@ async def _process_chunk_smart(
                 f"[v2] Chunk pages {page_range_str} error (attempt {attempt + 1}): {exc}"
             )
             if attempt < retries:
-                await asyncio.sleep(0.5 * (attempt + 1))
+                await asyncio.sleep(10 * (attempt + 1))
 
         attempt += 1
 
