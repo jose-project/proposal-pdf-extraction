@@ -11,7 +11,7 @@ Usage
 -----
     python scripts/benchmark.py
     python scripts/benchmark.py --pdf "source/proposals/Mega Polymers Inc. Proposal v2.pdf"
-    python scripts/benchmark.py --dir source/proposals --runs 1
+    python scripts/benchmark.py --dir source/proposals --runs 1111
 """
 
 import argparse
