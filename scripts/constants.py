@@ -5,14 +5,14 @@ Constants and configuration for PDF extraction.
 # Default values
 # Number of pages grouped per LLM request
 # 2 pages per chunk captures rate tables that span page boundaries
-DEFAULT_PAGES_PER_CHUNK = 2
+DEFAULT_PAGES_PER_CHUNK = 1
 
 # Maximum characters allowed per chunk before we split/truncate
 DEFAULT_MAX_CHARS = 6000
 
 # Maximum number of concurrent LLM requests
 # 4 works well for a single-GPU Qwen2.5-7B server; raise to 5 if no timeouts appear
-DEFAULT_MAX_CONCURRENT = 2
+DEFAULT_MAX_CONCURRENT = 1
 
 # Maximum tokens requested from the LLM per response
 DEFAULT_MAX_TOKENS = 4096
