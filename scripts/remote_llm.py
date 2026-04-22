@@ -13,7 +13,7 @@ class RemoteLLM:
     def __init__(
         self,
         endpoint: str = "http://143.110.210.212/v1/chat/completions",
-        timeout: int = 300,  # 300s to handle queued requests on single-GPU server
+        timeout: int = 120,  # 120s to handle queued requests on single-GPU server
     ):
         self.endpoint = endpoint
         self.timeout = aiohttp.ClientTimeout(total=timeout)
