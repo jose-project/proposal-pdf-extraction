@@ -16,7 +16,6 @@ Usage
 
 import argparse
 import asyncio
-import json
 import logging
 import sys
 import tempfile
@@ -255,8 +254,6 @@ async def benchmark(
             "v2_chunks":     v2_timing.get("chunks", "-"),
             "v2_cache_total": v2_cache_timing.get("total_s"),
             "plans":         plans,
-            "_v1_timing":    v1_timing,
-            "_v2_timing":    v2_timing,
         }
         rows.append(row)
 

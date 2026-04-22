@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from scripts.llm_pdf_extractor import extract_pdf_with_llm

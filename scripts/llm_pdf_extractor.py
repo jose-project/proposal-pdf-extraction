@@ -453,6 +453,7 @@ async def process_chunk(
                 return data
             
             # If JSON parsing failed, retry with reminder
+            last_error = "JSON parse failed"
             logger.warning(f"JSON parsing failed for pages {page_range_str}, attempt {attempt + 1}")
             logger.debug(f"LLM response (first 500 chars): {response[:500] if response else 'None'}")
             attempt += 1

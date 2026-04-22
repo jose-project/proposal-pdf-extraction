@@ -307,7 +307,7 @@ def format_table_with_option_columns(
     if header_row_idx is None or (renewal_col is None and current_col is None):
         return None
     
-    option_cols: List[tuple[str, int]] = []
+    option_cols: List[Tuple[str, int]] = []
     if current_col is not None:
         option_cols.append(("Current", current_col))
     if renewal_col is not None:
