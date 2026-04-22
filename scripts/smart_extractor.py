@@ -304,41 +304,23 @@ async def extract_pdf_smart(
         context_carrier, context_date = extract_document_context(pdf_path)
 
     # ------------------------------------------------------------------
-    # Step 4: Smart chunking (page scoring + continuity-aware grouping)
-    # ------------------------------------------------------------------
-    with recorder.measure("scoring_chunking"):
-        chunks = build_smart_chunks(
-            pdf_path,
-            ocr_texts=ocr_texts,
-            score_threshold=score_threshold,
-            pages_per_chunk=pages_per_chunk,
-            max_chars=max_chars,
-            start_page=start_page,
-            end_page=end_page,
-        )
-
-    if not chunks:
-        logger.warning(f"[v2] No chunks produced for {pdf_path.name}.")
-        output = {"file": str(pdf_path), "carrier": None, "plans": [], "timing": recorder.summary()}
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
-        cache.set(pdf_bytes, output)
-        recorder.log(logger, label=pdf_path.name)
-        return output
-
-    logger.info(f"[v2] {len(chunks)} chunks to process.")
-
-    # ------------------------------------------------------------------
-    # Step 5: Parallel LLM extraction
+    # Steps 4+5: Smart chunking + LLM extraction (pipelined)
+    #
+    # build_smart_chunks is a sync generator that reads and scores every page
+    # before yielding the first chunk.  We run it in a thread-pool worker so
+    # the event loop stays free to dispatch LLM calls the moment each chunk
+    # arrives, rather than waiting for the full scoring pass to finish.
     # ------------------------------------------------------------------
     llm = RemoteLLM()
     semaphore = asyncio.Semaphore(max_concurrent)
+    # Defined before try so the finally block can always cancel tasks even if
+    # an exception is raised before the inner asyncio.gather(*pending) runs.
+    pending: List[asyncio.Task] = []
     try:
-
         async def _call(page_numbers: List[int], text: str) -> Dict[str, Any]:
             async with semaphore:
                 with recorder.measure("llm_call", accumulate=True):
-                    return await _process_chunk_smart(
+                    result = await _process_chunk_smart(
                         llm,
                         pdf_path.name,
                         page_numbers,
@@ -347,9 +329,58 @@ async def extract_pdf_smart(
                         context_date,
                         max_tokens=max_tokens,
                     )
+                    result["_page_numbers"] = page_numbers
+                    return result
 
-        tasks = [_call(pns, txt) for pns, txt in chunks]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        loop = asyncio.get_running_loop()
+        chunk_queue: asyncio.Queue = asyncio.Queue(maxsize=8)
+        chunk_count = 0
+
+        def _produce() -> None:
+            nonlocal chunk_count
+            try:
+                for chunk in build_smart_chunks(
+                    pdf_path,
+                    ocr_texts=ocr_texts,
+                    score_threshold=score_threshold,
+                    pages_per_chunk=pages_per_chunk,
+                    max_chars=max_chars,
+                    start_page=start_page,
+                    end_page=end_page,
+                ):
+                    chunk_count += 1
+                    # Blocking put — backs up the producer thread when the
+                    # queue is full, preventing unbounded memory growth.
+                    asyncio.run_coroutine_threadsafe(chunk_queue.put(chunk), loop).result()
+            finally:
+                # Sentinel is always sent, even if build_smart_chunks raises.
+                asyncio.run_coroutine_threadsafe(chunk_queue.put(None), loop).result()
+
+        async def _consume() -> None:
+            while True:
+                item = await chunk_queue.get()
+                if item is None:
+                    break
+                pns, txt = item
+                pending.append(asyncio.create_task(_call(pns, txt)))
+
+        with recorder.measure("scoring_chunking"):
+            await asyncio.gather(
+                loop.run_in_executor(None, _produce),
+                _consume(),
+            )
+
+        if not pending:
+            logger.warning(f"[v2] No chunks produced for {pdf_path.name}.")
+            output = {"file": str(pdf_path), "carrier": None, "plans": [], "timing": recorder.summary()}
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+            cache.set(pdf_bytes, output)
+            recorder.log(logger, label=pdf_path.name)
+            return output
+
+        logger.info(f"[v2] {chunk_count} chunk(s) to process.")
+        results = await asyncio.gather(*pending, return_exceptions=True)
 
         # ------------------------------------------------------------------
         # Step 6: Merge and normalise (same logic as v1)
@@ -369,10 +400,12 @@ async def extract_pdf_smart(
                 if isinstance(carrier_val, str) and carrier_val.strip():
                     carriers.append(carrier_val.strip())
 
+                page_numbers = result.get("_page_numbers", [])
+
                 for plan_raw in result.get("plans", []):
                     if not isinstance(plan_raw, dict):
                         continue
-                    entry = normalize_plan(plan_raw, chunks[chunk_idx][0])
+                    entry = normalize_plan(plan_raw, page_numbers)
                     if not entry:
                         continue
 
@@ -387,7 +420,7 @@ async def extract_pdf_smart(
                     if idx_match:
                         column_suffix += f"-idx{idx_match.group(1)}"
 
-                    page_key = f"page-{chunks[chunk_idx][0][0]}"
+                    page_key = f"page-{page_numbers[0] if page_numbers else 0}"
                     key = "::".join(
                         [
                             plan_id_str,
@@ -407,9 +440,9 @@ async def extract_pdf_smart(
             valid_results = [r for r in results if isinstance(r, dict)]
             chunks_with_retries = sum(1 for r in valid_results if r.get("_retries", 0) > 0)
             total_retry_calls = sum(r.get("_retries", 0) for r in valid_results)
-            retry_rate = chunks_with_retries / len(chunks) if chunks else 0.0
+            retry_rate = chunks_with_retries / chunk_count if chunk_count else 0.0
             logger.info(
-                f"[v2] Retry rate: {chunks_with_retries}/{len(chunks)} chunks ({retry_rate:.0%}), "
+                f"[v2] Retry rate: {chunks_with_retries}/{chunk_count} chunks ({retry_rate:.0%}), "
                 f"{total_retry_calls} extra LLM call(s)"
             )
 
@@ -425,7 +458,7 @@ async def extract_pdf_smart(
         # ------------------------------------------------------------------
         timing_summary = recorder.summary()
         timing_summary["cache_hit"] = False
-        timing_summary["chunks"] = len(chunks)
+        timing_summary["chunks"] = chunk_count
         timing_summary["ocr_pages"] = len(ocr_texts)
 
         output = {
@@ -458,5 +491,12 @@ async def extract_pdf_smart(
         return output
 
     finally:
+        # Cancel any tasks that were created but not yet awaited (happens when
+        # _produce raises before asyncio.gather(*pending) is reached).
+        for task in pending:
+            if not task.done():
+                task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         await llm.close()
         logger.debug("[v2] LLM session closed")

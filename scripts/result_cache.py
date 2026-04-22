@@ -13,16 +13,22 @@ should always produce a fresh extraction.
 import copy
 import hashlib
 import logging
+from collections import OrderedDict
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of extraction results kept in memory at once.
+# Each entry typically holds a few KB of JSON; 200 entries ≈ a few MB.
+_MAX_CACHE_ENTRIES = 200
+
 
 class ResultCache:
-    """Thread-safe (GIL-protected) in-memory cache keyed by PDF content hash."""
+    """Thread-safe (GIL-protected) in-memory LRU cache keyed by PDF content hash."""
 
-    def __init__(self) -> None:
-        self._store: Dict[str, Any] = {}
+    def __init__(self, max_entries: int = _MAX_CACHE_ENTRIES) -> None:
+        self._store: OrderedDict[str, Any] = OrderedDict()
+        self._max_entries = max_entries
 
     # ------------------------------------------------------------------
     # Public interface
@@ -39,26 +45,34 @@ class ResultCache:
             Previously cached extraction result, or None on cache miss.
         """
         key = self._hash(pdf_bytes)
-        result = self._store.get(key)
-        if result is not None:
-            logger.info(f"Cache HIT  for PDF hash {key[:16]}…")
-            return copy.deepcopy(result)
-        logger.debug(f"Cache MISS for PDF hash {key[:16]}…")
-        return None
+        if key not in self._store:
+            logger.debug(f"Cache MISS for PDF hash {key[:16]}…")
+            return None
+        # Move to end to mark as recently used (LRU).
+        self._store.move_to_end(key)
+        logger.info(f"Cache HIT  for PDF hash {key[:16]}…")
+        return copy.deepcopy(self._store[key])
 
     def set(self, pdf_bytes: bytes, result: Any) -> None:
         """
         Store *result* in the cache under the hash of *pdf_bytes*.
+
+        Evicts the least-recently-used entry when the cache is full.
 
         Args:
             pdf_bytes: Raw PDF file content (used to compute the cache key).
             result: Extraction result dict to cache.
         """
         key = self._hash(pdf_bytes)
+        if key in self._store:
+            self._store.move_to_end(key)
         self._store[key] = copy.deepcopy(result)
+        if len(self._store) > self._max_entries:
+            evicted_key, _ = self._store.popitem(last=False)
+            logger.info(f"Cache EVICT oldest entry {evicted_key[:16]}… (limit {self._max_entries})")
         logger.info(
             f"Cache SET  for PDF hash {key[:16]}… "
-            f"(total entries: {len(self._store)})"
+            f"(total entries: {len(self._store)}/{self._max_entries})"
         )
 
     def clear(self) -> None:

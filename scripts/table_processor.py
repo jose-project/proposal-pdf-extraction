@@ -185,7 +185,7 @@ def find_table_columns(table: List[List]) -> Dict[str, Optional[int]]:
         row_str = normalize_text(" ".join(str(cell) if cell else "" for cell in row))
         
         # Check for "Renewal Plan" / "Current Plan" structure
-        if "renewal plan" in row_str or ("current plan" in row_str and "renewal plan" in row_str):
+        if "renewal plan" in row_str or "current plan" in row_str:
             result["header_row_idx"] = row_idx
             for col_idx, cell in enumerate(row):
                 cell_str = normalize_text(str(cell))

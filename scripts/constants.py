@@ -30,6 +30,7 @@ RATE_STRUCTURES = [
     "3_tier",
     "4_tier",
     "5_tier",
+    "6_tier",
     "8_tier",
     "aca_age",
     "age_band_5",

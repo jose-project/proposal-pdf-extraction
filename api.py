@@ -358,14 +358,17 @@ async def extract_rates_v2(
     """
     validate_pdf_file(pdf)
 
-    temp_dir = Path(tempfile.gettempdir()) / "eb3_extractor_v2"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    file_id = str(uuid.uuid4())
-    temp_pdf_path = temp_dir / f"upload_{file_id}.pdf"
-    temp_output_path = temp_dir / f"output_{file_id}.json"
+    temp_pdf_path = None
+    temp_output_path = None
 
     try:
+        temp_dir = Path(tempfile.gettempdir()) / "eb3_extractor_v2"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = str(uuid.uuid4())
+        temp_pdf_path = temp_dir / f"upload_{file_id}.pdf"
+        temp_output_path = temp_dir / f"output_{file_id}.json"
+
         pdf_bytes = await pdf.read()
         if not pdf_bytes:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
@@ -400,9 +403,9 @@ async def extract_rates_v2(
         logger.error(f"[v2] Error processing {pdf.filename}: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(exc)}")
     finally:
-        if temp_pdf_path.exists():
+        if temp_pdf_path and temp_pdf_path.exists():
             temp_pdf_path.unlink()
-        if temp_output_path.exists():
+        if temp_output_path and temp_output_path.exists():
             temp_output_path.unlink()
 
 

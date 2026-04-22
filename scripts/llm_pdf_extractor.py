@@ -41,6 +41,7 @@ RATE STRUCTURES and their rates keys:
 - 4_tier: employee_only, employee_spouse, employee_child, employee_family
 - 5_tier: employee_only, employee_spouse, employee_child, employee_two_or_more_children, employee_family
 - aca_age / age_band_5 / age_band_10: age-range string keys like "<20", "20-24", "64+"
+- 6_tier / 8_tier: like 4_tier but with additional tier keys (e.g. employee_plus_one, employee_two_or_more_children)
 - esc_5_year / esc_10_year: {"employee": {age bands}, "spouse": {age bands}, "children": number|null}
 - 4_tier_5_year / 4_tier_10_year: {"employee_only": {age bands}, "employee_spouse": {age bands}, "employee_child": {age bands}, "employee_family": {age bands}}
 - 3_tier_age_band / 2_tier_age_band: same age-range key style, fewer tier keys
@@ -320,7 +321,9 @@ def _infer_rate_structure(rates: Dict[str, Any]) -> Optional[str]:
         return "4_tier"
     if count == 5:
         return "5_tier"
-    if count >= 6:
+    if count == 6:
+        return "6_tier"
+    if count >= 7:
         return "8_tier"
 
     return None

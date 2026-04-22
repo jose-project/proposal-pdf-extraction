@@ -20,7 +20,7 @@ import logging
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pdfplumber
 
@@ -294,9 +294,9 @@ def build_smart_chunks(
     max_chars: int = MAX_CHARS_V2,
     start_page: Optional[int] = None,
     end_page: Optional[int] = None,
-) -> List[Tuple[List[int], str]]:
+) -> Generator[Tuple[List[int], str], None, None]:
     """
-    Build LLM-ready (page_numbers, text) chunks from a PDF using smart logic:
+    Yield LLM-ready (page_numbers, text) chunks from a PDF using smart logic:
 
       - Skips pages below *score_threshold* (rate-irrelevant pages).
       - Groups consecutive scored pages into chunks up to *pages_per_chunk*.
@@ -314,8 +314,8 @@ def build_smart_chunks(
         start_page: First page to consider (1-based, inclusive).
         end_page: Last page to consider (1-based, inclusive).
 
-    Returns:
-        List of (page_numbers, combined_text) tuples ready for LLM processing.
+    Yields:
+        (page_numbers, combined_text) tuples ready for LLM processing.
     """
     if ocr_texts is None:
         ocr_texts = {}
@@ -359,19 +359,20 @@ def build_smart_chunks(
         f"score threshold {score_threshold}."
     )
 
-    # Group into chunks
-    chunks: List[Tuple[List[int], str]] = []
+    # Group into chunks and yield each one as soon as it is complete
     buf_pages: List[int] = []
     buf_text: List[str] = []
     buf_tables: List[List[Any]] = []
 
-    def _flush() -> None:
+    def _flush() -> Optional[Tuple[List[int], str]]:
         if buf_pages:
-            chunks.append((list(buf_pages), "\n".join(buf_text)))
+            joined = "\n".join(buf_text)
             logger.debug(
                 f"Chunk: pages {buf_pages[0]}-{buf_pages[-1]} "
-                f"({len(buf_pages)} pages, {sum(len(t) for t in buf_text)} chars)"
+                f"({len(buf_pages)} pages, {len(joined)} chars)"
             )
+            return (list(buf_pages), joined)
+        return None
 
     for page_num, content, _score, raw_tables in passing:
         # Check continuity with previous page in buffer
@@ -384,7 +385,9 @@ def build_smart_chunks(
         over_char_limit = len(candidate_text) > max_chars
 
         if buf_pages and (over_page_limit or over_char_limit) and not continuous:
-            _flush()
+            chunk = _flush()
+            if chunk:
+                yield chunk
             buf_pages = [page_num]
             buf_text = [content]
             buf_tables = raw_tables
@@ -393,7 +396,6 @@ def build_smart_chunks(
             buf_text.append(content)
             buf_tables = raw_tables  # keep track of last page's tables
 
-    _flush()
-
-    logger.info(f"Built {len(chunks)} smart chunks from {pdf_path.name}.")
-    return chunks
+    chunk = _flush()
+    if chunk:
+        yield chunk
