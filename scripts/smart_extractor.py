@@ -154,10 +154,12 @@ async def _process_chunk_smart(
             data = extract_json(response)
             if data is not None and isinstance(data, dict):
                 n_plans = len(data.get("plans", []))
+                retry_note = f" (after {attempt} retr{'y' if attempt == 1 else 'ies'})" if attempt > 0 else ""
                 logger.info(
                     f"[v2] Chunk pages {page_range_str}: "
-                    f"{n_plans} plans, carrier={data.get('carrier')!r}"
+                    f"{n_plans} plans, carrier={data.get('carrier')!r}{retry_note}"
                 )
+                data["_retries"] = attempt
                 return data
 
             last_error = "JSON parse failed"
@@ -183,7 +185,7 @@ async def _process_chunk_smart(
         f"[v2] Chunk pages {page_range_str}: gave up after {retries + 1} attempts. "
         f"Last error: {last_error}"
     )
-    return {"carrier": None, "plans": []}
+    return {"carrier": None, "plans": [], "_retries": attempt}
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +403,15 @@ async def extract_pdf_smart(
                         plans[key].source_pages = sorted(
                             set(plans[key].source_pages + entry.source_pages)
                         )
+
+            valid_results = [r for r in results if isinstance(r, dict)]
+            chunks_with_retries = sum(1 for r in valid_results if r.get("_retries", 0) > 0)
+            total_retry_calls = sum(r.get("_retries", 0) for r in valid_results)
+            retry_rate = chunks_with_retries / len(chunks) if chunks else 0.0
+            logger.info(
+                f"[v2] Retry rate: {chunks_with_retries}/{len(chunks)} chunks ({retry_rate:.0%}), "
+                f"{total_retry_calls} extra LLM call(s)"
+            )
 
             # Prefer context_carrier if LLM didn't detect one
             carrier_value: Optional[str] = None

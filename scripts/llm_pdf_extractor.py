@@ -20,37 +20,36 @@ from scripts.timing import TimingRecorder
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """You extract insurance plan rates from PDF proposal text. Return ONLY valid JSON with no markdown and no explanation.
+SYSTEM_PROMPT = """Extract insurance plan rates from PDF proposal text. Output ONLY valid JSON — no markdown, no prose.
 
-EXTRACT:
-- Carrier name
-- Per-tier rates: employee_only, employee_spouse, employee_child, employee_family
-- Plan name and plan ID (short alphanumeric code near the plan name, e.g. S531BCE, G531PPO, AIBPP615)
+EXTRACT per plan:
+- carrier: insurer name
+- plan_name: plan label or column header (e.g. "Gold PPO", "Current Plan", "Option 1")
+- plan_id: short alphanumeric code adjacent to plan name (e.g. S531BCE, G531PPO, AIBPP615) — null if absent
+- rate_structure: see list below
+- rates: numeric only (strip "$" and commas; "N/A" → null)
 
-SKIP:
-- Totals, sums, composite rates, enrollment counts
-- Tables without individual tier breakdown (EO / ES / EC / EF)
+SKIP: totals, composites, enrollment counts, pages with no per-tier EO/ES/EC/EF breakdown.
 
-RATES: "$829.64" → 829.64. Plain decimals like "59.26" → 59.26. Ignore whole integers in non-rate context (page numbers, counts).
-MULTIPLE PLANS: If columns show "Current Plan" and "Renewal Plan" (or similar options), extract ALL as separate plans with plan_name set to the column label.
+MULTIPLE PLANS: When side-by-side columns each have their own rates (Current/Renewal, Option A/B, Plan 1/2), return each column as a separate plan object with plan_name = the column header.
 
-RATE STRUCTURE TYPES (pick the best match):
-2_tier, 3_tier, 4_tier, 5_tier, 8_tier, aca_age, age_band_5, age_band_10,
-esc_5_year, esc_10_year, 4_tier_5_year, 4_tier_10_year, 3_tier_age_band, 2_tier_age_band
+COLUMN ABBREVIATIONS: EO = employee_only, ES = employee_spouse, EC = employee_child, EF = employee_family, E+1 = employee_plus_one, E+2 = employee_plus_two_or_more.
 
-RATES OBJECT KEYS by structure:
+RATE STRUCTURES and their rates keys:
 - 2_tier: employee_only, employee_family
 - 3_tier: employee_only, employee_plus_one, employee_plus_two_or_more
 - 4_tier: employee_only, employee_spouse, employee_child, employee_family
 - 5_tier: employee_only, employee_spouse, employee_child, employee_two_or_more_children, employee_family
-- age-banded (aca_age / age_band_5 / age_band_10): use age range keys like "<20", "20-24", "64+"
+- aca_age / age_band_5 / age_band_10: age-range string keys like "<20", "20-24", "64+"
 - esc_5_year / esc_10_year: {"employee": {age bands}, "spouse": {age bands}, "children": number|null}
 - 4_tier_5_year / 4_tier_10_year: {"employee_only": {age bands}, "employee_spouse": {age bands}, "employee_child": {age bands}, "employee_family": {age bands}}
+- 3_tier_age_band / 2_tier_age_band: same age-range key style, fewer tier keys
 
-OUTPUT SCHEMA:
-{"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": string, "rates": object}]}
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": string, "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
 
-If no rate tables found: {"carrier": null, "plans": []}"""
+EXAMPLE — Anthem Gold PPO (G531PPO) with EO $524.18 / ES $1,048.36 / EC $786.27 / EF $1,310.45:
+{"carrier":"Anthem","plans":[{"plan_name":"Gold PPO","plan_id":"G531PPO","rate_structure":"4_tier","rates":{"employee_only":524.18,"employee_spouse":1048.36,"employee_child":786.27,"employee_family":1310.45}}]}"""
 
 USER_PROMPT_TEMPLATE = """File: {pdf_name}, Pages: {page_range}
 
@@ -446,10 +445,12 @@ async def process_chunk(
             if data is not None and isinstance(data, dict):
                 plans_count = len(data.get("plans", []))
                 carrier = data.get("carrier")
+                retry_note = f" (after {attempt} retr{'y' if attempt == 1 else 'ies'})" if attempt > 0 else ""
                 logger.info(
                     f"Chunk processed successfully: pages {page_range_str} - "
-                    f"found {plans_count} plans, carrier: {carrier or 'None'}"
+                    f"found {plans_count} plans, carrier: {carrier or 'None'}{retry_note}"
                 )
+                data["_retries"] = attempt
                 return data
             
             # If JSON parsing failed, retry with reminder
@@ -472,7 +473,7 @@ async def process_chunk(
     logger.warning(f"Chunk processing failed after {retries + 1} attempts: pages {page_range_str}")
     if last_error:
         logger.error(f"Last error: {last_error}")
-    return {"carrier": None, "plans": []}
+    return {"carrier": None, "plans": [], "_retries": attempt}
 
 
 async def _stream_chunks_async(
@@ -665,10 +666,16 @@ async def extract_pdf_with_llm(
                             set(plans[key].source_pages + entry.source_pages)
                         )
 
+        valid_results = [r for r in results if isinstance(r, dict)]
+        chunks_with_retries = sum(1 for r in valid_results if r.get("_retries", 0) > 0)
+        total_retry_calls = sum(r.get("_retries", 0) for r in valid_results)
+        retry_rate = chunks_with_retries / len(chunks) if chunks else 0.0
         logger.info(
             f"Results processing complete: {successful_chunks} successful chunks, "
             f"{failed_chunks} failed chunks, {total_plans_found} total plans found, "
-            f"{len(plans)} unique plans after deduplication"
+            f"{len(plans)} unique plans after deduplication — "
+            f"retry rate: {chunks_with_retries}/{len(chunks)} chunks ({retry_rate:.0%}), "
+            f"{total_retry_calls} extra LLM call(s)"
         )
 
         # Determine most common carrier
