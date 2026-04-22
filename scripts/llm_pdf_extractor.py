@@ -463,9 +463,9 @@ async def process_chunk(
             logger.error(f"Error processing chunk pages {page_range_str}, attempt {attempt + 1}: {e}")
             attempt += 1
             if attempt <= retries:
-                wait_time = 0.5 * attempt
+                wait_time = 10 * attempt
                 logger.debug(f"Retrying in {wait_time}s...")
-                await asyncio.sleep(wait_time)  # Exponential backoff
+                await asyncio.sleep(wait_time)
 
     # Return empty result on failure
     logger.warning(f"Chunk processing failed after {retries + 1} attempts: pages {page_range_str}")
@@ -638,7 +638,7 @@ async def extract_pdf_with_llm(
                     entry = normalize_plan(plan_raw, chunks[idx][0])
                     if not entry:
                         continue
-                    page_key = f"page-{chunks[idx][0]}"
+                    page_key = f"page-{chunks[idx][0][0]}"
                     plan_identifier = entry.plan_name or f"plan-{len(plans)}"
                     plan_id_str = entry.plan_id or ""
                     column_suffix = ""

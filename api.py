@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -324,9 +325,6 @@ async def extract_rates_range(
 # ---------------------------------------------------------------------------
 # v2 endpoints — smart pipeline (same LLM, better pre-processing)
 # ---------------------------------------------------------------------------
-
-import asyncio
-from typing import List
 
 from scripts.smart_extractor import extract_pdf_smart
 

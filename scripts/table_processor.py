@@ -313,7 +313,7 @@ def format_table_with_option_columns(
     if renewal_col is not None:
         option_cols.append(("Renewal", renewal_col))
 
-    table_text = f"\n--- Table {table_idx + 1} (Page {page_num}) - PLAN OPTIONS ---\n"
+    table_text = f"\n--- Table {table_idx} (Page {page_num}) - PLAN OPTIONS ---\n"
 
     # Try to find plan_id from a row containing "Plan ID"
     plan_id: Optional[str] = None
@@ -384,12 +384,12 @@ def format_table_with_direct_tier_columns(
         return None
     
     logger.info(
-        f"Page {page_num}, Table {table_idx + 1}: Processing table with direct tier columns "
+        f"Page {page_num}, Table {table_idx}: Processing table with direct tier columns "
         f"(EO:{columns['employee_only_col']}, ES:{columns['employee_spouse_col']}, "
         f"EC:{columns['employee_child_col']}, EF:{columns['employee_family_col']})"
     )
     
-    table_text = f"\n--- Table {table_idx + 1} (Page {page_num}) - RATES ---\n"
+    table_text = f"\n--- Table {table_idx} (Page {page_num}) - RATES ---\n"
     table_text += "RATES (from direct tier columns):\n"
     
     plans_extracted = 0
@@ -408,7 +408,7 @@ def format_table_with_direct_tier_columns(
         if not current_plan_id:
             continue
         
-        logger.debug(f"Page {page_num}, Table {table_idx + 1}: Processing plan {current_plan_id}")
+        logger.debug(f"Page {page_num}, Table {table_idx}: Processing plan {current_plan_id}")
         
         # Extract rates from tier columns
         plan_rates = []
@@ -433,10 +433,10 @@ def format_table_with_direct_tier_columns(
             logger.debug(f"  Extracted {len(plan_rates)} rates for plan {current_plan_id}")
     
     if plans_extracted == 0:
-        logger.warning(f"Page {page_num}, Table {table_idx + 1}: No plans extracted from direct tier columns table")
+        logger.warning(f"Page {page_num}, Table {table_idx}: No plans extracted from direct tier columns table")
         return None
     
-    logger.info(f"Page {page_num}, Table {table_idx + 1}: Extracted {plans_extracted} plans from direct tier columns")
+    logger.info(f"Page {page_num}, Table {table_idx}: Extracted {plans_extracted} plans from direct tier columns")
     return table_text
 
 
@@ -478,11 +478,11 @@ def format_table_with_tier_rows(
             tier_cell = str(row[0]) if row[0] else ""
             tier_lines = [line.strip() for line in tier_cell.split("\n") if line.strip()]
             tier_names = tier_lines
-            logger.debug(f"Page {page_num}, Table {table_idx + 1}: Found tier row at index {row_idx} with {len(tier_names)} tier names")
+            logger.debug(f"Page {page_num}, Table {table_idx}: Found tier row at index {row_idx} with {len(tier_names)} tier names")
             break
     
     if tier_row_idx is None:
-        logger.debug(f"Page {page_num}, Table {table_idx + 1}: No tier row found in tier-row structure detection")
+        logger.debug(f"Page {page_num}, Table {table_idx}: No tier row found in tier-row structure detection")
         return None
     
     # Find plan names from header rows (look for "Current", "Renewal", etc. in first few rows)
@@ -560,7 +560,6 @@ def format_table_with_tier_rows(
     start_col = 1  # Default: start from column 1
     if len(tier_row) > 1:
         col1_cell = str(tier_row[1]) if tier_row[1] else ""
-        col1_lower = normalize_text(col1_cell)
         # If column 1 contains only numbers (employee counts), skip it and start from column 2
         # Otherwise, column 0 might have tier names + counts combined, so column 1 is the first rate column
         if col1_cell and re.match(r'^[\d\s]+$', col1_cell.strip()) and len(col1_cell.strip()) < 10:
@@ -583,7 +582,7 @@ def format_table_with_tier_rows(
             rate_columns.append((col_idx, rates))
     
     if not rate_columns:
-        logger.warning(f"Page {page_num}, Table {table_idx + 1}: Found tier row but no rate columns extracted")
+        logger.warning(f"Page {page_num}, Table {table_idx}: Found tier row but no rate columns extracted")
         return None
     
     # Map tier names to standard names
@@ -600,15 +599,15 @@ def format_table_with_tier_rows(
             tier_mapping[len(tier_mapping)] = "employee_family"
     
     if not tier_mapping:
-        logger.warning(f"Page {page_num}, Table {table_idx + 1}: Found tier row but couldn't map tier names")
+        logger.warning(f"Page {page_num}, Table {table_idx}: Found tier row but couldn't map tier names")
         return None
     
     logger.info(
-        f"Page {page_num}, Table {table_idx + 1}: Found tier-row structure with {len(rate_columns)} plan columns, "
+        f"Page {page_num}, Table {table_idx}: Found tier-row structure with {len(rate_columns)} plan columns, "
         f"tier_row_idx={tier_row_idx}, plan_names={plan_names}, plan_carriers={plan_carriers}"
     )
     
-    table_text = f"\n--- Table {table_idx + 1} (Page {page_num}) - PLAN RATES ---\n"
+    table_text = f"\n--- Table {table_idx} (Page {page_num}) - PLAN RATES ---\n"
     table_text += f"IMPORTANT: This table contains {len(rate_columns)} separate plan options. Extract ALL of them as separate plans.\n"
     table_text += f"Each plan option has different rates. Do NOT combine or skip any options.\n\n"
     plans_extracted = 0
@@ -689,10 +688,10 @@ def format_table_with_tier_rows(
             logger.debug(f"  Added plan {plan_idx + 1}: {actual_plan_name} (carrier: {carrier}) with {len(plan_rates)} rates")
     
     if plans_extracted == 0:
-        logger.warning(f"Page {page_num}, Table {table_idx + 1}: No plans extracted from tier-row structure")
+        logger.warning(f"Page {page_num}, Table {table_idx}: No plans extracted from tier-row structure")
         return None
     
-    logger.info(f"Page {page_num}, Table {table_idx + 1}: Extracted {plans_extracted} plans from tier-row structure")
+    logger.info(f"Page {page_num}, Table {table_idx}: Extracted {plans_extracted} plans from tier-row structure")
     return table_text
 
 
@@ -709,12 +708,12 @@ def process_table(table: List[List], page_num: int, table_idx: int) -> Optional[
     # Check if this is a benefit type comparison table (columns = plans, rows = benefit types like Dental/Vision)
     # These tables don't contain tier rates and should be skipped
     if has_benefit_type_rows(table):
-        logger.debug(f"Page {page_num}, Table {table_idx + 1}: Skipped (benefit type comparison table, not tier rate table)")
+        logger.debug(f"Page {page_num}, Table {table_idx}: Skipped (benefit type comparison table, not tier rate table)")
         return None
     
     # Check if this is a summary table that should be skipped
     if is_summary_table(table) and not has_tier_breakdown(table):
-        logger.debug(f"Page {page_num}, Table {table_idx + 1}: Skipped (summary/composite table without tier breakdown)")
+        logger.debug(f"Page {page_num}, Table {table_idx}: Skipped (summary/composite table without tier breakdown)")
         return None
     
     # Find column indices
@@ -724,7 +723,7 @@ def process_table(table: List[List], page_num: int, table_idx: int) -> Optional[
     # IMPORTANT: Check tier-row structure FIRST, because it might be incorrectly detected as direct tier columns
     tier_row_result = format_table_with_tier_rows(table, page_num, table_idx)
     if tier_row_result:
-        logger.info(f"Page {page_num}, Table {table_idx + 1}: Using tier-row structure")
+        logger.info(f"Page {page_num}, Table {table_idx}: Using tier-row structure")
         return tier_row_result
 
     # Then check for option columns (Current/Renewal)
@@ -739,13 +738,13 @@ def process_table(table: List[List], page_num: int, table_idx: int) -> Optional[
         
         # Fallback: check if it has tier breakdown but unknown structure
         if has_tier_breakdown(table):
-            logger.debug(f"Page {page_num}, Table {table_idx + 1}: Unknown structure, showing full table")
-            table_text = f"\n--- Table {table_idx + 1} (Page {page_num}) ---\n"
+            logger.debug(f"Page {page_num}, Table {table_idx}: Unknown structure, showing full table")
+            table_text = f"\n--- Table {table_idx} (Page {page_num}) ---\n"
             for row in table:
                 row_text = " | ".join(str(cell) if cell else "" for cell in row)
                 table_text += row_text + "\n"
             return table_text
         else:
-            logger.debug(f"Page {page_num}, Table {table_idx + 1}: Skipped (no tier breakdown found)")
+            logger.debug(f"Page {page_num}, Table {table_idx}: Skipped (no tier breakdown found)")
             return None
 

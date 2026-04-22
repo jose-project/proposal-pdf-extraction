@@ -10,6 +10,7 @@ This is intentional — PDF proposals are versioned documents; a new upload
 should always produce a fresh extraction.
 """
 
+import copy
 import hashlib
 import logging
 from typing import Any, Dict, Optional
@@ -41,9 +42,9 @@ class ResultCache:
         result = self._store.get(key)
         if result is not None:
             logger.info(f"Cache HIT  for PDF hash {key[:16]}…")
-        else:
-            logger.debug(f"Cache MISS for PDF hash {key[:16]}…")
-        return result
+            return copy.deepcopy(result)
+        logger.debug(f"Cache MISS for PDF hash {key[:16]}…")
+        return None
 
     def set(self, pdf_bytes: bytes, result: Any) -> None:
         """
@@ -54,7 +55,7 @@ class ResultCache:
             result: Extraction result dict to cache.
         """
         key = self._hash(pdf_bytes)
-        self._store[key] = result
+        self._store[key] = copy.deepcopy(result)
         logger.info(
             f"Cache SET  for PDF hash {key[:16]}… "
             f"(total entries: {len(self._store)})"

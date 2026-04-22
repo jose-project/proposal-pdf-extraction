@@ -27,7 +27,10 @@ from scripts.llm_pdf_extractor import (
     extract_json,
     normalize_plan,
 )
-from scripts.ocr_processor import get_page_text_with_ocr_fallback, is_scanned_page
+from scripts.ocr_processor import (
+    is_scanned_page,
+    ocr_pdf_pages_batch,
+)
 from scripts.remote_llm import RemoteLLM
 from scripts.timing import TimingRecorder
 from scripts.result_cache import get_cache
@@ -47,7 +50,7 @@ logger = logging.getLogger(__name__)
 # v2 defaults
 # ---------------------------------------------------------------------------
 
-SMART_MAX_CONCURRENT = 2
+SMART_MAX_CONCURRENT = 1
 SMART_MAX_TOKENS = 4096
 SMART_RETRY_COUNT = 2
 
@@ -157,6 +160,7 @@ async def _process_chunk_smart(
                 )
                 return data
 
+            last_error = "JSON parse failed"
             logger.warning(
                 f"[v2] Chunk pages {page_range_str}: "
                 f"JSON parse failed (attempt {attempt + 1})"
@@ -188,26 +192,32 @@ async def _process_chunk_smart(
 
 def _collect_ocr_texts(pdf_path: Path) -> Dict[int, str]:
     """
-    Scan every page; for scanned pages apply OCR.
+    Identify scanned pages then OCR them all in a single pdf2image pass.
 
     Returns:
         Dict mapping 1-based page number → OCR text for pages that needed OCR.
-        Pages that had sufficient pdfplumber text are NOT included.
+        Pages with sufficient pdfplumber text are NOT included.
     """
-    ocr_texts: Dict[int, str] = {}
+    scanned_pages: List[int] = []
     try:
         with pdfplumber.open(pdf_path) as doc:
             for idx, page in enumerate(doc.pages, start=1):
                 raw_text = (page.extract_text() or "").strip()
                 if is_scanned_page(raw_text):
-                    ocr_text, used = get_page_text_with_ocr_fallback(
-                        pdf_path, idx, raw_text
-                    )
-                    if used:
-                        ocr_texts[idx] = ocr_text
+                    scanned_pages.append(idx)
     except Exception as exc:
-        logger.error(f"[v2] OCR pre-pass failed: {exc}")
-    return ocr_texts
+        logger.error(f"[v2] OCR pre-pass (page scan) failed: {exc}")
+        return {}
+
+    if not scanned_pages:
+        return {}
+
+    logger.info(f"[v2] OCR pre-pass: {len(scanned_pages)} scanned page(s) detected, running batch OCR.")
+    try:
+        return ocr_pdf_pages_batch(pdf_path, scanned_pages)
+    except Exception as exc:
+        logger.error(f"[v2] Batch OCR failed: {exc}")
+        return {}
 
 
 # ---------------------------------------------------------------------------

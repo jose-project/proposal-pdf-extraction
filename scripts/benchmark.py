@@ -11,7 +11,7 @@ Usage
 -----
     python scripts/benchmark.py
     python scripts/benchmark.py --pdf "source/proposals/Mega Polymers Inc. Proposal v2.pdf"
-    python scripts/benchmark.py --dir source/proposals --runs 1111
+    python scripts/benchmark.py --dir source/proposals --detail
 """
 
 import argparse
@@ -146,11 +146,11 @@ def _print_table(rows: List[Dict[str, Any]]) -> None:
             f"{str(plans):>{col_num}}"
         )
 
-        if v1_t:
+        if v1_t is not None:
             v1_total_sum += v1_t
-        if v2_t:
+        if v2_t is not None:
             v2_total_sum += v2_t
-        if v2_h:
+        if v2_h is not None:
             v2_hit_sum += v2_h
 
     print(sep)
@@ -186,10 +186,10 @@ def _print_detail(pdf_name: str, v1: Dict, v2: Dict) -> None:
             elif isinstance(v, dict):
                 print(
                     f"    {k:<32} count={v.get('count', '?')}  "
-                    f"total={v.get('total', '?'):.3f}s  "
-                    f"avg={v.get('avg', '?'):.3f}s  "
-                    f"min={v.get('min', '?'):.3f}s  "
-                    f"max={v.get('max', '?'):.3f}s"
+                    f"total={v.get('total', 0.0):.3f}s  "
+                    f"avg={v.get('avg', 0.0):.3f}s  "
+                    f"min={v.get('min', 0.0):.3f}s  "
+                    f"max={v.get('max', 0.0):.3f}s"
                 )
             elif isinstance(v, float):
                 print(f"    {k:<32} {v:.3f}s")
