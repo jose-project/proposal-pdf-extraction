@@ -23,6 +23,18 @@ from typing import Any, Dict, List, Optional
 
 from scripts.llm_pdf_extractor import (
     SYSTEM_PROMPT,
+    SYSTEM_PROMPT_ACA_BREAKDOWN,
+    SYSTEM_PROMPT_BCBSIL_RENEWAL,
+    SYSTEM_PROMPT_BCBSIL_BBF,
+    SYSTEM_PROMPT_AETNA_COST_GRID,
+    SYSTEM_PROMPT_LF_MEDICAL_TIERED,
+    SYSTEM_PROMPT_MEWA_OHIO,
+    SYSTEM_PROMPT_OPTIMYL_GERBER,
+    SYSTEM_PROMPT_NATIONWIDE_SELF_FUNDED,
+    SYSTEM_PROMPT_JENSENIT_RFP,
+    SYSTEM_PROMPT_TRUSTMARK_AETNA,
+    SYSTEM_PROMPT_ANTHEM_RENEWAL,
+    SYSTEM_PROMPT_SIDECAR_HEALTH,
     PlanEntry,
     extract_json,
     normalize_plan,
@@ -39,6 +51,7 @@ from scripts.smart_pdf_processor import (
     PAGES_PER_CHUNK_V2,
     SCORE_THRESHOLD,
     build_smart_chunks,
+    detect_document_type,
     extract_document_context,
 )
 
@@ -115,6 +128,7 @@ async def _process_chunk_smart(
     context_date: Optional[str],
     max_tokens: int = SMART_MAX_TOKENS,
     retries: int = SMART_RETRY_COUNT,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> Dict[str, Any]:
     """
     Send one chunk to the LLM and return parsed JSON result.
@@ -147,7 +161,7 @@ async def _process_chunk_smart(
     while attempt <= retries:
         try:
             response = await llm.chat(
-                SYSTEM_PROMPT,
+                system_prompt,
                 user_prompt,
                 max_new_tokens=max_tokens,
             )
@@ -304,6 +318,27 @@ async def extract_pdf_smart(
         context_carrier, context_date = extract_document_context(pdf_path)
 
     # ------------------------------------------------------------------
+    # Step 3b: Document type detection — choose prompt
+    # ------------------------------------------------------------------
+    doc_type = detect_document_type(pdf_path)
+    _PROMPT_MAP = {
+        "aca_age_breakdown":      SYSTEM_PROMPT_ACA_BREAKDOWN,
+        "bcbsil_renewal":         SYSTEM_PROMPT_BCBSIL_RENEWAL,
+        "bcbsil_bbf":             SYSTEM_PROMPT_BCBSIL_BBF,
+        "aetna_cost_grid":        SYSTEM_PROMPT_AETNA_COST_GRID,
+        "lf_medical_tiered":      SYSTEM_PROMPT_LF_MEDICAL_TIERED,
+        "mewa_ohio":              SYSTEM_PROMPT_MEWA_OHIO,
+        "optimyl_gerber":         SYSTEM_PROMPT_OPTIMYL_GERBER,
+        "nationwide_self_funded": SYSTEM_PROMPT_NATIONWIDE_SELF_FUNDED,
+        "jensenit_rfp":           SYSTEM_PROMPT_JENSENIT_RFP,
+        "trustmark_aetna":        SYSTEM_PROMPT_TRUSTMARK_AETNA,
+        "anthem_renewal":         SYSTEM_PROMPT_ANTHEM_RENEWAL,
+        "sidecar_health":         SYSTEM_PROMPT_SIDECAR_HEALTH,
+    }
+    chosen_prompt = _PROMPT_MAP.get(doc_type, SYSTEM_PROMPT)
+    logger.info(f"[v2] Using prompt: {doc_type}")
+
+    # ------------------------------------------------------------------
     # Steps 4+5: Smart chunking + LLM extraction (pipelined)
     #
     # build_smart_chunks is a sync generator that reads and scores every page
@@ -328,6 +363,7 @@ async def extract_pdf_smart(
                         context_carrier,
                         context_date,
                         max_tokens=max_tokens,
+                        system_prompt=chosen_prompt,
                     )
                     result["_page_numbers"] = page_numbers
                     return result

@@ -1,5 +1,23 @@
 {
   "file": "source\\proposals\\CityKidsDental_BBFProposal_01.01.2026.pdf",
-  "carrier": "Blue Cross and Blue Shield of Illinois",
-  "plans": []
+  "carrier": "Blue Cross",
+  "plans": [],
+  "timing": {
+    "cache_lookup_s": 0.001,
+    "ocr_prepass_s": 4.528,
+    "context_extraction_s": 0.551,
+    "scoring_chunking_s": 6.271,
+    "merge_normalise_s": 0.0,
+    "llm_call_s": {
+      "count": 9,
+      "total": 361.186,
+      "min": 40.014,
+      "max": 40.331,
+      "avg": 40.132
+    },
+    "total_s": 374.548,
+    "cache_hit": false,
+    "chunks": 9,
+    "ocr_pages": 0
+  }
 }

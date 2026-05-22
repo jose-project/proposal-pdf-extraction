@@ -52,6 +52,307 @@ No rates found: {"carrier": null, "plans": []}
 EXAMPLE — Anthem Gold PPO (G531PPO) with EO $524.18 / ES $1,048.36 / EC $786.27 / EF $1,310.45:
 {"carrier":"Anthem","plans":[{"plan_name":"Gold PPO","plan_id":"G531PPO","rate_structure":"4_tier","rates":{"employee_only":524.18,"employee_spouse":1048.36,"employee_child":786.27,"employee_family":1310.45}}]}"""
 
+SYSTEM_PROMPT_ACA_BREAKDOWN = """Extract ACA age-banded insurance plan rates from a healthcare benefits proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: This is a "healthcare & benefits proposal" with a "Medical Employee Costs Breakdown" section. Each plan occupies one page showing:
+- Plan header line: "[Number] [Carrier] [PlanID] [Full Plan Name]"  e.g. "1 BlueCross BlueShield of Illinois B5N1BCE Blue Choice Preferred Bronze"
+- A "Monthly Age Banded Rates" table with 51 age bands displayed in 3 side-by-side columns
+- Age bands run: <=14, 15, 16, 17 … 63, 64+  (read all 3 columns left-to-right, top-to-bottom)
+
+IGNORE card-view summary pages — they show only a "Total Monthly Cost" lump sum, not individual age rates.
+
+EXTRACT per plan:
+- carrier: insurer name (e.g. "BlueCross BlueShield of Illinois")
+- plan_name: full plan name from the header line (e.g. "BlueCross BlueShield of Illinois B5N1BCE Blue Choice Preferred Bronze")
+- plan_id: short alphanumeric code from the header line (e.g. "B5N1BCE", "S534BCE", "G530BCE", "P5M1BCE")
+- rate_structure: always "aca_age"
+- rates: all 51 age-band values as numbers (strip "$" and commas)
+
+RATE KEYS — use exactly these 51 strings in this order:
+"<=14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30",
+"31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47",
+"48","49","50","51","52","53","54","55","56","57","58","59","60","61","62","63","64+"
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "aca_age", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — plan B5N1BCE with age <=14 $267.77, age 35 $427.74, age 64+ $1,050.09:
+{"carrier":"BlueCross BlueShield of Illinois","plans":[{"plan_name":"BlueCross BlueShield of Illinois B5N1BCE Blue Choice Preferred Bronze","plan_id":"B5N1BCE","rate_structure":"aca_age","rates":{"<=14":267.77,"15":291.58,"16":300.68,"17":309.78,"18":319.58,"19":329.38,"20":339.53,"21":350.03,"22":350.03,"23":350.03,"24":350.03,"25":351.43,"26":358.43,"27":366.83,"28":380.48,"29":391.69,"30":397.29,"31":405.69,"32":414.09,"33":419.34,"34":424.94,"35":427.74,"36":430.54,"37":433.34,"38":436.14,"39":441.74,"40":447.34,"41":455.74,"42":463.79,"43":474.99,"44":488.99,"45":505.45,"46":525.05,"47":547.10,"48":572.30,"49":597.15,"50":625.16,"51":652.81,"52":683.26,"53":714.06,"54":747.32,"55":780.57,"56":816.62,"57":853.03,"58":891.88,"59":911.13,"60":949.98,"61":983.59,"62":1005.64,"63":1033.29,"64+":1050.09}}]}"""
+
+SYSTEM_PROMPT_BCBSIL_RENEWAL = """Extract insurance plan rates from a Blue Cross and Blue Shield of Illinois (BCBSIL) Group Renewal Exhibit. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: This is a multi-section renewal packet. ONLY extract from these three appendix sections — ignore all other pages (cover, instructions, plan notes, legal, enrollment):
+  • "Appendix - Monthly Medical Premiums"   — Medical plans with Age Rates and Composite Rates tables
+  • "Appendix - Monthly Dental Premiums"    — Dental plans with age-band and composite rate tables
+  • "Appendix - Monthly Standalone Vision Premiums" — Vision plans with composite rates only
+
+EXTRACT per plan:
+- carrier: always "Blue Cross and Blue Shield of Illinois"
+- plan_name: full plan name as shown (e.g. "G534BCE Blue PPO", "DILHR30 Blue Dental Choice Select")
+- plan_id: alphanumeric code adjacent to plan name (e.g. "G534BCE", "S531PPO", "DILHR30", "DILLM41") — null if absent
+- rate_structure: always "4_tier"
+- rates: Composite Rates row — EO / ES / EC / EF mapped to keys below
+
+COLUMN ABBREVIATIONS: EO = employee_only, ES = employee_spouse, EC = employee_child, EF = employee_family
+
+IMPORTANT — USE COMPOSITE RATES, NOT AGE RATES:
+Each medical and dental plan has two sub-tables:
+  1. "Age Rates" table — age-banded (ACA bands) — SKIP THIS
+  2. "Composite Rates" table — four tiers (EO / ES / EC / EF) — EXTRACT THIS
+For vision plans there is only a composite rate table.
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Medical plan G534BCE with EO $524.18, ES $1,048.36, EC $786.27, EF $1,310.45:
+{"carrier":"Blue Cross and Blue Shield of Illinois","plans":[{"plan_name":"G534BCE Blue PPO","plan_id":"G534BCE","rate_structure":"4_tier","rates":{"employee_only":524.18,"employee_spouse":1048.36,"employee_child":786.27,"employee_family":1310.45}}]}
+
+EXAMPLE — Dental plan DILHR30 with EO $32.50, ES $65.00, EC $78.00, EF $104.00:
+{"carrier":"Blue Cross and Blue Shield of Illinois","plans":[{"plan_name":"DILHR30 Blue Dental Choice Select","plan_id":"DILHR30","rate_structure":"4_tier","rates":{"employee_only":32.50,"employee_spouse":65.00,"employee_child":78.00,"employee_family":104.00}}]}"""
+
+SYSTEM_PROMPT_BCBSIL_BBF = """Extract insurance plan rates from a Blue Cross and Blue Shield of Illinois Blue Balance Funded (BBF) ASO Proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: This is a BCBSIL "Blue Balance Funded" self-funded proposal. Extract ONLY from "Appendix - Total Monthly Charges" pages — ignore cover, instructions, benefit summary, and census pages. Each appendix page shows one plan with a "4 - Tier for Billing" section containing these rows:
+  Monthly Enrollment / Administrative Fees / Individual Stop Loss Premium / Aggregate Stop Loss Premium / Projected Claim Funding / Total Monthly Charges / Monthly Tier Total
+
+EXTRACT PER PLAN — "Total Monthly Charges" row only:
+- carrier: always "Blue Cross and Blue Shield of Illinois"
+- plan_name: Plan ID shown in the page header before the tier table (e.g. "AIBPP615", "AIBCO609")
+- plan_id: same alphanumeric code
+- rate_structure: always "4_tier"
+- rates: Total Monthly Charges values → employee_only / employee_spouse / employee_child / employee_family
+
+TIER COLUMN ORDER: Employee Only | Employee + Spouse | Employee + Child(ren) | Employee + Family
+DO NOT extract: Administrative Fees, Stop Loss Premiums, Projected Claim Funding, Monthly Tier Total, or the "All Tiers" total column.
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Plan AIBPP615, Total Monthly Charges EO $948.00, ES $1,833.56, EC $1,795.73, EF $2,681.32:
+{"carrier":"Blue Cross and Blue Shield of Illinois","plans":[{"plan_name":"AIBPP615","plan_id":"AIBPP615","rate_structure":"4_tier","rates":{"employee_only":948.00,"employee_spouse":1833.56,"employee_child":1795.73,"employee_family":2681.32}}]}"""
+
+SYSTEM_PROMPT_AETNA_COST_GRID = """Extract insurance plan rates from an Aetna renewal cost grid proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: This is an Aetna "Renewal FI" proposal with Medical Cost Grid and Dental Cost Grid pages. The column order is always: EE / EE+SP / EE+CH / FAM / Total (skip Total). Numbers in parentheses like (27) (4) (0) (3) are enrollment counts — NOT rates, skip them.
+
+Each plan row: [PlanID] [copay info] $EE $EE+SP $EE+CH $FAM $GroupTotal
+Below a plan row there may be a line starting "ID:" with an internal ID — ignore it.
+Plans appear under section headers CURRENTPLANS, RENEWINGPLANS, ALTERNATEPLANS — extract all sections.
+
+EXTRACT per plan:
+- carrier: "Aetna"
+- plan_name: the plan code string (e.g. "KSPPO6500HSA70/50ECYV23", "VolKS8APPOMax1500")
+- plan_id: same plan code
+- rate_structure: "4_tier"
+- rates: EE→employee_only, EE+SP→employee_spouse, EE+CH→employee_child, FAM→employee_family
+
+SKIP: the last (5th) dollar amount on each row (group total), and enrollment counts in parentheses.
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — plan KSPPO6500HSA70/50ECYV23 with EE $488.00, EE+SP $1,360.00, EE+CH $858.00, FAM $1,455.00:
+{"carrier":"Aetna","plans":[{"plan_name":"KSPPO6500HSA70/50ECYV23","plan_id":"KSPPO6500HSA70/50ECYV23","rate_structure":"4_tier","rates":{"employee_only":488.00,"employee_spouse":1360.00,"employee_child":858.00,"employee_family":1455.00}}]}"""
+
+SYSTEM_PROMPT_LF_MEDICAL_TIERED = """Extract insurance plan rates from a LifeFirst/United Healthcare "Medical Plan Summary/Rates" proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Each page shows multiple plans. For each plan, rates appear across four lines:
+  [Plan Code]  EE: $xxx.xx   $nn,nnn.nn   [deductible/copay columns…]
+               SP: $xxx.xx   …
+               CH: $xxx.xx   …
+               FAM: $xxx.xx  …
+
+The FIRST dollar amount after each tier label (EE: / SP: / CH: / FAM:) is the individual monthly rate — extract this.
+The SECOND larger dollar amount on the EE line (e.g. $21,969.45) is the "Total Monthly Required Health Cost" — SKIP.
+All deductible, OOP, copay, and prescription amounts are benefit details — SKIP.
+
+EXTRACT per plan:
+- carrier: null (not consistently labeled in this format)
+- plan_name: plan code (e.g. "HP60002575i8025B", "P2500i100LX26B")
+- plan_id: same plan code
+- rate_structure: "4_tier"
+- rates: EE→employee_only, SP→employee_spouse, CH→employee_child, FAM→employee_family
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — plan HP60002575i8025B: EE $559.73, SP $1,119.47, CH $1,091.48, FAM $1,735.17:
+{"carrier":null,"plans":[{"plan_name":"HP60002575i8025B","plan_id":"HP60002575i8025B","rate_structure":"4_tier","rates":{"employee_only":559.73,"employee_spouse":1119.47,"employee_child":1091.48,"employee_family":1735.17}}]}"""
+
+SYSTEM_PROMPT_MEWA_OHIO = """Extract insurance plan rates from an Ohio Chamber Health MEWA (Multiple Employer Welfare Arrangement) proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Separate sections for "Medical Rates", "Dental CoInsurance Plans Rates", and "Vision Rates". In each section a header row lists plan codes, then rate rows follow:
+  Employee          24  $xxx.xx  $xxx.xx  $xxx.xx  …   (one $ per plan column)
+  Employee+Spouse    2  $xxx.xx  …
+  Employee+Child(ren) 1  $xxx.xx  …
+  Employee+Family    3  $xxx.xx  …
+
+The NUMBER immediately after the tier label (24, 2, 1, 3) is an enrollment count — NOT a rate, skip it.
+Plan codes appear in the header row (e.g. "EQY4w/G15S EQY3w/G15S" medical, "P3303 P3384" dental, "S1006 S1008" vision).
+
+EXTRACT per plan (one plan per column in the header row):
+- carrier: "Ohio Chamber Health"
+- plan_name: plan code (e.g. "EQY4w/G15S", "P3303", "S1006")
+- plan_id: same code
+- rate_structure: "4_tier"
+- rates: Employee→employee_only, Employee+Spouse→employee_spouse, Employee+Child(ren)→employee_child, Employee+Family→employee_family
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Medical plan EQZBw/G15S: Employee $875.49, Employee+Spouse $1,750.98, Employee+Child(ren) $1,619.66, Employee+Family $2,714.01:
+{"carrier":"Ohio Chamber Health","plans":[{"plan_name":"EQZBw/G15S","plan_id":"EQZBw/G15S","rate_structure":"4_tier","rates":{"employee_only":875.49,"employee_spouse":1750.98,"employee_child":1619.66,"employee_family":2714.01}}]}"""
+
+SYSTEM_PROMPT_OPTIMYL_GERBER = """Extract insurance plan rates from an Optimyl Benefits / Gerber Life self-funded proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Rates appear in a "Medical Composite Monthly Cost" table with numbered plan columns (Plan 1, Plan 2, Plan 3, Plan 4):
+  Tier               EE's
+  Employee            8    $xxx.xx  $xxx.xx  $xxx.xx  $xxx.xx
+  Employee + Spouse   2    $xxx.xx  …
+  Employee + Child    1    $xxx.xx  …
+  Family              0    $xxx.xx  …
+
+The NUMBER after the tier label (8, 2, 1, 0) is an enrollment count — NOT a rate, skip it.
+
+EXTRACT per plan column:
+- carrier: "Gerber Life / Optimyl Benefits"
+- plan_name: "Plan 1", "Plan 2", "Plan 3", or "Plan 4" (use network/type from Proposal Summary if available, e.g. "Plan 1 PPO")
+- plan_id: null
+- rate_structure: "4_tier"
+- rates: Employee→employee_only, Employee+Spouse→employee_spouse, Employee+Child→employee_child, Family→employee_family
+
+SKIP rows: Total Medical Monthly Cost, Monthly Stop Loss Premium, Monthly Administrative Fees, Monthly Claims Account Funding.
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Plan 1: Employee $559.95, Employee+Spouse $1,511.86, Employee+Child $1,119.89, Family $1,903.82:
+{"carrier":"Gerber Life / Optimyl Benefits","plans":[{"plan_name":"Plan 1","plan_id":null,"rate_structure":"4_tier","rates":{"employee_only":559.95,"employee_spouse":1511.86,"employee_child":1119.89,"employee_family":1903.82}}]}"""
+
+SYSTEM_PROMPT_NATIONWIDE_SELF_FUNDED = """Extract insurance plan rates from an Allstate Benefits / Nationwide self-funded medical plan proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Medical rates appear under "Monthly Bill Medical" on the "Stop-Loss Insurance and Financial Details" page. Two plan columns: Plan 1 and Plan 2.
+
+EXTRACT these rows (map to 4_tier keys):
+  Employee           → employee_only
+  Employee + Spouse  → employee_spouse
+  Employee + Child   → employee_child
+  Family             → employee_family
+
+IGNORE — these are insurance/admin costs, NOT per-employee rates:
+  Stop-loss Premium, Admin/Sales/General Expenses, Claims Account
+
+Dental plans may appear in a separate "Dental Portion of Cost" table with EE/ES/EC/Fam rows — extract as separate plan entries with plan_name indicating the dental plan name.
+
+EXTRACT per plan:
+- carrier: "Allstate Benefits"
+- plan_name: "Plan 1" or "Plan 2" (or dental plan name if in dental table)
+- plan_id: null
+- rate_structure: "4_tier"
+- rates: as mapped above
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Plan 1: Employee $450.52, Employee+Spouse $1,351.55, Employee+Child $1,126.29, Family $1,711.95:
+{"carrier":"Allstate Benefits","plans":[{"plan_name":"Plan 1","plan_id":null,"rate_structure":"4_tier","rates":{"employee_only":450.52,"employee_spouse":1351.55,"employee_child":1126.29,"employee_family":1711.95}}]}"""
+
+SYSTEM_PROMPT_JENSENIT_RFP = """Extract insurance plan option premiums from a broker dental+vision RFP comparison document. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: 3-page side-by-side comparison. Page 1 shows group-level monthly premium totals per column/option:
+  Row "Dental"    → monthly dental premium for that option
+  Row "Vision"    → monthly vision premium for that option
+  Row "TOTAL"     → combined total (skip — it's just dental + vision)
+  Row "Admin Fee" → admin fee (skip)
+
+Column headers name the carrier/option (e.g. "Current/Principal", "Renewal/Principal", "Ameritas", "Principal - Vision $130").
+Pages 2 and 3 contain benefit feature descriptions — no rate values, ignore them.
+
+EXTRACT per column option:
+- carrier: carrier name for that column (e.g. "Principal Financial", "Ameritas")
+- plan_name: the column header label (e.g. "Current/Principal", "Renewal/Principal", "Ameritas Dental with Principal Vision $130")
+- plan_id: null
+- rate_structure: "group_total"
+- rates: {"dental_monthly": number, "vision_monthly": number}
+
+Skip columns that have no numeric dental or vision values.
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "group_total", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — "Current/Principal" with Dental $394.03, Vision $42.60:
+{"carrier":"Principal Financial","plans":[{"plan_name":"Current/Principal","plan_id":null,"rate_structure":"group_total","rates":{"dental_monthly":394.03,"vision_monthly":42.60}}]}"""
+
+SYSTEM_PROMPT_TRUSTMARK_AETNA = """Extract insurance plan rates from a Trustmark HealthyEdge proposal (Aetna network). Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Each plan has a two-page block. The ODD page has a summary with a composite rate table:
+  Family Status  |  Composite Rate  |  Number of EE's  |  Monthly Cost
+  EE             |  $xxx.xx         |  nn               |  $nn,nnn.xx
+  ES             |  $xxx.xx         |  …
+  EC             |  $xxx.xx         |  …
+  FF             |  $xxx.xx         |  …       ← FF = Employee + Family
+
+The EVEN page shows cost breakdown (Stop-Loss, Admin, Claim Prefunding) — SKIP THIS PAGE.
+Extract ONLY the "Composite Rate" column — NOT "Number of EE's" or "Monthly Cost".
+
+EXTRACT per plan:
+- carrier: "Trustmark"
+- plan_name: plan label shown at top of the summary page (e.g. "Plan 13", "Plan 14", "Plan 15")
+- plan_id: null
+- rate_structure: "4_tier"
+- rates: EE→employee_only, ES→employee_spouse, EC→employee_child, FF→employee_family
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — Plan 13: EE $645.23, ES $1,435.25, EC $1,078.17, FF $2,414.20:
+{"carrier":"Trustmark","plans":[{"plan_name":"Plan 13","plan_id":null,"rate_structure":"4_tier","rates":{"employee_only":645.23,"employee_spouse":1435.25,"employee_child":1078.17,"employee_family":2414.20}}]}"""
+
+SYSTEM_PROMPT_ANTHEM_RENEWAL = """Extract insurance plan rates from an Anthem Blue Cross and Blue Shield fully insured renewal packet. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Two types of rate pages:
+  1. "Renewal rate sheet": Each plan has a "Current" row and a "Renewal" row with EO/ES/EC/EF rates plus a group total (last column — SKIP). Extract both rows as separate plan entries.
+  2. "Portfolio plans and rates" pages: Wide table with many plans. Rate columns are labeled Employee / Employee + Spouse / Employee + Children / Employee + Family.
+
+EXTRACT per plan per rate period:
+- carrier: "Anthem Blue Cross and Blue Shield"
+- plan_name: plan description + rate period (e.g. "Blue Access PPO 5000 Current", "Blue Access PPO 5000 Renewal")
+- plan_id: short code near plan name (e.g. "9CP7" from "Tiered-9CP7") — null if absent
+- rate_structure: "4_tier"
+- rates: Employee→employee_only, Employee+Spouse→employee_spouse, Employee+Children→employee_child, Employee+Family→employee_family
+
+SKIP: enrollment counts, premium increase column, enrollment-weighted group total (last $ column).
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — "Blue Access PPO 5000" Current: EO $469.11, ES $1,031.11, EC $791.86, EF $1,448.15:
+{"carrier":"Anthem Blue Cross and Blue Shield","plans":[{"plan_name":"Blue Access PPO 5000 Current","plan_id":"9CP7","rate_structure":"4_tier","rates":{"employee_only":469.11,"employee_spouse":1031.11,"employee_child":791.86,"employee_family":1448.15}}]}"""
+
+SYSTEM_PROMPT_SIDECAR_HEALTH = """Extract insurance plan rates from a Sidecar Health large group proposal. Output ONLY valid JSON — no markdown, no prose.
+
+DOCUMENT FORMAT: Plan options appear on two key pages:
+  - "Quote proposal" page: one proposed plan with EO/ES/EC/EF rates + Total Monthly Cost (last column — SKIP).
+  - "Alternative Plan Options" page: multiple plan rows, each with EO/ES/EC/EF rates + Total Monthly Cost (SKIP).
+
+Row format: [Plan Name]  $EO  $ES  $EC  $EF  $TotalMonthly
+Column order: Employee Only | Employee + Spouse | Employee + Child(ren) | Employee + Family | Total Monthly Cost
+
+EXTRACT per plan option:
+- carrier: "Sidecar Health"
+- plan_name: full plan name (e.g. "Sidecar Health Employer (0/5000)", "Sidecar Health Employer (0/250)")
+- plan_id: null
+- rate_structure: "4_tier"
+- rates: Employee Only→employee_only, Employee+Spouse→employee_spouse, Employee+Child(ren)→employee_child, Employee+Family→employee_family
+
+SKIP: Projected Enrollment row, Broker Service Fees row, Savings comparison table, Total Monthly Cost (5th column).
+
+SCHEMA: {"carrier": string|null, "plans": [{"plan_name": string|null, "plan_id": string|null, "rate_structure": "4_tier", "rates": object}]}
+No rates found: {"carrier": null, "plans": []}
+
+EXAMPLE — "Sidecar Health Employer (0/5000)": EO $441.83, ES $971.14, EC $745.81, EF $1,363.93:
+{"carrier":"Sidecar Health","plans":[{"plan_name":"Sidecar Health Employer (0/5000)","plan_id":null,"rate_structure":"4_tier","rates":{"employee_only":441.83,"employee_spouse":971.14,"employee_child":745.81,"employee_family":1363.93}}]}"""
+
 USER_PROMPT_TEMPLATE = """File: {pdf_name}, Pages: {page_range}
 
 {page_text}

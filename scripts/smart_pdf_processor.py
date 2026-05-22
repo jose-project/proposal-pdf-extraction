@@ -142,6 +142,130 @@ def extract_document_context(
 
 
 # ---------------------------------------------------------------------------
+# Document type detection
+# ---------------------------------------------------------------------------
+
+_ACA_BREAKDOWN_FINGERPRINTS = [
+    re.compile(r"Monthly Age Banded Rates", re.IGNORECASE),
+    re.compile(r"•\s*Proposal\s*•\s*Effective Date", re.IGNORECASE),
+    re.compile(r"<=\s*14"),
+]
+
+_BCBSIL_RENEWAL_FINGERPRINTS = [
+    re.compile(r"Renewal Generation Date", re.IGNORECASE),
+    re.compile(r"Renewal Effective Date", re.IGNORECASE),
+    re.compile(r"Composite Rates", re.IGNORECASE),
+]
+
+_BCBSIL_BBF_FINGERPRINTS = [
+    re.compile(r"Blue Balance Funded", re.IGNORECASE),
+    re.compile(r"4\s*-\s*Tier for Billing", re.IGNORECASE),
+    re.compile(r"Appendix\s*-\s*Total Monthly Charges", re.IGNORECASE),
+]
+
+_AETNA_COST_GRID_FINGERPRINTS = [
+    re.compile(r"Cost Grid", re.IGNORECASE),
+    re.compile(r"EE\s+EE\+SP\s+EE\+CH\s+FAM", re.IGNORECASE),
+    re.compile(r"QuoteID:\d+", re.IGNORECASE),
+]
+
+_LF_MEDICAL_TIERED_FINGERPRINTS = [
+    re.compile(r"Medical Plan Summary/Rates", re.IGNORECASE),
+    re.compile(r"Tiered Rates", re.IGNORECASE),
+    re.compile(r"PEPM:", re.IGNORECASE),
+]
+
+_MEWA_OHIO_FINGERPRINTS = [
+    re.compile(r"OHIOCHAMBERHEALTH|Ohio\s+Chamber\s+Health", re.IGNORECASE),
+    re.compile(r"FranchiseName:", re.IGNORECASE),
+]
+
+_OPTIMYL_GERBER_FINGERPRINTS = [
+    re.compile(r"Optimyl", re.IGNORECASE),
+    re.compile(r"Gerber Life", re.IGNORECASE),
+]
+
+_NATIONWIDE_SF_FINGERPRINTS = [
+    re.compile(r"Allstate Benefits", re.IGNORECASE),
+    re.compile(r"Monthly Bill Medical", re.IGNORECASE),
+]
+
+_JENSENIT_RFP_FINGERPRINTS = [
+    re.compile(r"Premium Overview of Quoted Benefits", re.IGNORECASE),
+    re.compile(r"Dental Coverage-Employer Paid", re.IGNORECASE),
+]
+
+_TRUSTMARK_AETNA_FINGERPRINTS = [
+    re.compile(r"Trustmark", re.IGNORECASE),
+    re.compile(r"Multi-Quote Summary", re.IGNORECASE),
+    re.compile(r"HealthyEdge", re.IGNORECASE),
+]
+
+_ANTHEM_RENEWAL_FINGERPRINTS = [
+    re.compile(r"Anthem Blue Cross", re.IGNORECASE),
+    re.compile(r"Renewal rate sheet", re.IGNORECASE),
+]
+
+_SIDECAR_HEALTH_FINGERPRINTS = [
+    re.compile(r"Sidecar Health", re.IGNORECASE),
+    re.compile(r"Quote proposal", re.IGNORECASE),
+]
+
+_DETECTION_SCAN_PAGES = 15
+
+
+def detect_document_type(pdf_path: Path) -> str:
+    """
+    Detect the document type by scanning the first pages for known fingerprints.
+
+    Returns one of:
+        "aca_age_breakdown"     — healthcare benefits proposal, Monthly Age Banded Rates
+        "bcbsil_renewal"        — BCBSIL Group Renewal Exhibit, Composite Rates appendices
+        "bcbsil_bbf"            — BCBSIL Blue Balance Funded ASO proposal
+        "aetna_cost_grid"       — Aetna Renewal FI cost grid
+        "lf_medical_tiered"     — LifeFirst/UHC Medical Plan Summary tiered rates
+        "mewa_ohio"             — Ohio Chamber Health MEWA
+        "optimyl_gerber"        — Optimyl Benefits / Gerber Life self-funded
+        "nationwide_self_funded"— Allstate Benefits / Nationwide self-funded
+        "jensenit_rfp"          — broker dental+vision RFP comparison
+        "trustmark_aetna"       — Trustmark HealthyEdge via Aetna network
+        "anthem_renewal"        — Anthem Blue Cross fully insured renewal packet
+        "sidecar_health"        — Sidecar Health large group proposal
+        "generic"               — all other documents
+    """
+    combined_text = ""
+    try:
+        with pdfplumber.open(pdf_path) as doc:
+            for page in doc.pages[:_DETECTION_SCAN_PAGES]:
+                combined_text += (page.extract_text() or "") + "\n"
+    except Exception as exc:
+        logger.warning(f"Document type detection failed for {pdf_path.name}: {exc}")
+        return "generic"
+
+    _checks = [
+        ("aca_age_breakdown",      _ACA_BREAKDOWN_FINGERPRINTS),
+        ("bcbsil_renewal",         _BCBSIL_RENEWAL_FINGERPRINTS),
+        ("bcbsil_bbf",             _BCBSIL_BBF_FINGERPRINTS),
+        ("aetna_cost_grid",        _AETNA_COST_GRID_FINGERPRINTS),
+        ("lf_medical_tiered",      _LF_MEDICAL_TIERED_FINGERPRINTS),
+        ("mewa_ohio",              _MEWA_OHIO_FINGERPRINTS),
+        ("optimyl_gerber",         _OPTIMYL_GERBER_FINGERPRINTS),
+        ("nationwide_self_funded", _NATIONWIDE_SF_FINGERPRINTS),
+        ("jensenit_rfp",           _JENSENIT_RFP_FINGERPRINTS),
+        ("trustmark_aetna",        _TRUSTMARK_AETNA_FINGERPRINTS),
+        ("anthem_renewal",         _ANTHEM_RENEWAL_FINGERPRINTS),
+        ("sidecar_health",         _SIDECAR_HEALTH_FINGERPRINTS),
+    ]
+
+    for doc_type, fingerprints in _checks:
+        if all(fp.search(combined_text) for fp in fingerprints):
+            logger.info(f"[v2] Document type: {doc_type} ({pdf_path.name})")
+            return doc_type
+
+    return "generic"
+
+
+# ---------------------------------------------------------------------------
 # 3. Markdown table formatter (generic fallback)
 # ---------------------------------------------------------------------------
 
